@@ -711,6 +711,9 @@ void pretty_print(Args *args, DIR *o_dir, char *dirname) {
     num_strings++;
   }
 
+  if (strings == NULL)
+    return;
+
   strings = (char **)bubble_sort((void **)strings, &string_cmp);
 
   int terminal_width = w.ws_col;
@@ -861,7 +864,16 @@ void dir_recursive_list_printing(Args *args, DIR *dir, char *dirname,
 
   depth++;
 
+  char *has_space = ft_strchr(dirname, ' ');
+
+  if (has_space != NULL)
+    ft_putchar('\'');
+
   ft_putstr(dirname);
+
+  if (has_space != NULL)
+    ft_putchar('\'');
+
   ft_putendl(":");
 
   if (args->options.listing) {
@@ -945,6 +957,8 @@ int main(int argc, char **argv, char **env) {
       args.inputs = table_push(args.inputs, ft_strdup(argv[i]));
     }
   }
+
+  args.inputs = (char **)bubble_sort((void **)args.inputs, &string_cmp);
 
   /* print_options(&args); */
   /**/
