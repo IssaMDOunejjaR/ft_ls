@@ -1,10 +1,7 @@
 #include "../headers/ft_lib.h"
 
-int ft_putendl(char *str) {
-  int count = 0;
+void ft_putendl(char *str) {
 
-  count += ft_putstr(str);
-  count += ft_putchar('\n');
-
-  return count;
+  ft_putstr(str);
+  ft_putchar('\n');
 }
