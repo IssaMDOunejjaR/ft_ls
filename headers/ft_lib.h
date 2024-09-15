@@ -22,6 +22,8 @@ char *ft_substr(const char *str, size_t start, size_t end);
 char *ft_strchr(const char *s, int c);
 char *ft_trim(char const *str, char const *set);
 char *ft_strjoin(char *s1, char *s2);
+char ft_to_lower(char c);
+char *ft_to_lowercase(char *str);
 size_t ft_number_len(int number);
 int ft_index_of_char(const char *str, char c);
 int ft_last_index_of(char *str, char c);

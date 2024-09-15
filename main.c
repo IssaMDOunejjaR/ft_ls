@@ -318,6 +318,75 @@ Info **list_append(Info **lst, Info *value) {
   return new_list;
 }
 
+typedef bool (*CompareFunc)(void *, void *b);
+
+char *skip_dots(char *str) {
+  int i = 0;
+
+  while (str[i] == '.')
+    i++;
+
+  if (str[i] == '\0')
+    return str;
+
+  return &str[i];
+}
+
+bool info_cmp(Info *a, Info *b) {
+  char *tmp_a = ft_to_lowercase(a->name);
+  char *tmp_b = ft_to_lowercase(b->name);
+
+  if (ft_strcmp(tmp_a, tmp_b) > 0) {
+    free(tmp_a);
+    free(tmp_b);
+
+    return true;
+  }
+
+  free(tmp_a);
+  free(tmp_b);
+
+  return false;
+}
+
+bool string_cmp(void *a, void *b) {
+  char *tmp_a = ft_to_lowercase(a);
+  char *tmp_b = ft_to_lowercase(b);
+
+  if (ft_strcmp(tmp_a, tmp_b) > 0) {
+    free(tmp_a);
+    free(tmp_b);
+
+    return true;
+  }
+
+  free(tmp_a);
+  free(tmp_b);
+
+  return false;
+}
+
+void **bubble_sort(void **list, CompareFunc cmp) {
+  bool is_sorted = true;
+
+  while (is_sorted) {
+    is_sorted = false;
+
+    for (int i = 0; list[i] != NULL; i++) {
+      if (list[i + 1] != NULL && cmp(list[i], list[i + 1])) {
+        void *tmp = list[i];
+
+        list[i] = list[i + 1];
+        list[i + 1] = tmp;
+
+        is_sorted = true;
+      }
+    }
+  }
+
+  return list;
+}
+
 void print_dir_name(Args *args, char *dirname, int size, bool is_symlink,
                     bool is_directory, bool is_executable) {
   char *colors[] = {FILE_COLOR, DIRECTORY_COLOR, SYMLINK_COLOR, EXECUTABLE};
@@ -470,6 +539,8 @@ void listing_print(Args *args, DIR *o_dir, char *dirname) {
   ft_putnbr(block_size);
   ft_putchar('\n');
   if (infos) {
+    infos = (Info **)bubble_sort((void **)infos, (CompareFunc)&info_cmp);
+
     for (int i = 0; infos[i] != NULL; i++) {
       if (infos[i]->is_symlink) {
         ft_putstr("l");
@@ -640,6 +711,8 @@ void pretty_print(Args *args, DIR *o_dir, char *dirname) {
     num_strings++;
   }
 
+  strings = (char **)bubble_sort((void **)strings, &string_cmp);
+
   int terminal_width = w.ws_col;
 
   int num_columns = 1;
@@ -705,7 +778,7 @@ void pretty_print(Args *args, DIR *o_dir, char *dirname) {
         char *is_spaced_name = strchr(strings[index], ' ');
 
         if (col == 0 && quote_space == 1 && is_spaced_name == NULL)
-          printf(" ");
+          ft_putchar(' ');
 
         int spaces = 0;
         int next_word = row + (col + 1) * num_rows;
