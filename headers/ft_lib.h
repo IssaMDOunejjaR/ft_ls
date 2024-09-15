@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int ft_putchar(int c);
-int ft_putstr(char *str);
-int ft_putendl(char *str);
+void ft_putchar(int c);
+void ft_putstr(char *str);
+void ft_putendl(char *str);
 void ft_putnbr(int number);
 int ft_strcmp(const char *s1, const char *s2);
 size_t ft_strlen(const char *s);
