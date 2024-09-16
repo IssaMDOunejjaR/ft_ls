@@ -1,0 +1,12 @@
+./ft_ls /home/issamounejjar/.config -R: 2.05s real, 1.94s user, 0.09s sys
+/bin/ls /home/issamounejjar/.config -R: 0.03s real, 0.01s user, 0.01s sys
+
+./ft_ls /home/issamounejjar/.config -Rl: 2.03s real, 1.67s user, 0.36s sys
+/bin/ls /home/issamounejjar/.config -Rl: 0.09s real, 0.02s user, 0.06s sys
+
+./ft_ls /home/issamounejjar/.config -Rla --color: 2.27s real, 1.71s user, 0.50s sys
+/bin/ls /home/issamounejjar/.config -Rla --color: 0.09s real, 0.02s user, 0.06s sys
+
+Command terminated by signal 11
+./ft_ls /home/issamounejjar -Rla --color: 36.74s real, 14.29s user, 17.83s sys
+/bin/ls /home/issamounejjar -Rla --color: 35.06s real, 4.50s user, 15.43s sys

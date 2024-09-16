@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -24,6 +25,27 @@
 #define DIRECTORY_COLOR BLUE
 #define SYMLINK_COLOR CYAN
 #define EXECUTABLE GREEN
+
+typedef enum { _FILE, _DIR, _SYMLIK, _NONE } PathType;
+
+PathType check_path_type(char *path) {
+  struct stat lstats;
+
+  if (lstat(path, &lstats) == -1) {
+    perror("lstat");
+
+    return _NONE;
+  }
+
+  if (S_ISLNK(lstats.st_mode))
+    return _SYMLIK;
+  else if (S_ISDIR(lstats.st_mode))
+    return _DIR;
+  else if (S_ISREG(lstats.st_mode))
+    return _FILE;
+
+  return _NONE;
+}
 
 char *VALID_OPTIONS[][4] = {
     {"-a", "--all", "do not ignore entries starting with .", NULL},
@@ -214,17 +236,51 @@ int check_short_option(Args *args, char c) {
 }
 
 void print_short_option_not_found(char option) {
-  ft_putstr("ft_ls: invalid option -- '");
-  ft_putchar(option);
-  ft_putendl("'");
-  ft_putendl("Try 'ft_ls --help' for more information.");
+  char *prefix = "ft_ls: invalid option -- '";
+  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = 1;
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, &option);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(msg);
+
+  free(msg);
 }
 
 void print_long_option_not_found(char *option) {
-  ft_putstr("ft_ls: unrecognized option '");
-  ft_putstr(option);
-  ft_putendl("'");
-  ft_putendl("Try 'ft_ls --help' for more information.");
+  char *prefix = "ft_ls: unrecognized option '";
+  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = ft_strlen(option);
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, option);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(msg);
+
+  free(msg);
 }
 
 char *is_set(bool condition) { return condition ? "✓" : "x"; }
@@ -244,9 +300,27 @@ void print_options(Args *args) {
 }
 
 void input_not_found(char *input) {
-  ft_putstr("ft_ls: cannot access '");
-  ft_putstr(input);
-  ft_putendl("': No such file or directory");
+  char *prefix = "ft_ls: cannot access '";
+  char *suffix = "': No such file or directory\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = ft_strlen(input);
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, input);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(msg);
+
+  free(msg);
 }
 
 int *arraycpy(int *arr, size_t size) {
@@ -918,6 +992,37 @@ void dir_list_printing(Args *args, DIR *dir, char *dirname) {
     dir_default_list_printing(args, dir, dirname);
 }
 
+int parse_args(Args *args, int argc, char **argv) {
+  for (int i = 1; i < argc; i++) {
+    if (ft_strcmp(argv[i], "--help") == 0) {
+      print_help();
+
+      clear_args(args);
+
+      return 0;
+    } else if (argv[i][0] == '-') {
+      if (argv[i][1] == '-') {
+        if (check_long_option(args, argv[i]) == 0) {
+          print_long_option_not_found(argv[i]);
+
+          return 2;
+        }
+      } else {
+        for (int j = 1; argv[i][j] != '\0'; j++) {
+          if (check_short_option(args, argv[i][j]) == 0) {
+            print_short_option_not_found(argv[i][j]);
+
+            return 2;
+          }
+        }
+      }
+    } else
+      args->inputs = table_push(args->inputs, ft_strdup(argv[i]));
+  }
+
+  return 0;
+}
+
 int main(int argc, char **argv, char **env) {
   /* for (int i = 0; env[i] != NULL; i++) { */
   /*   char **tmp = ft_split(env[i], '='); */
@@ -930,45 +1035,8 @@ int main(int argc, char **argv, char **env) {
 
   init_args(&args);
 
-  for (int i = 1; i < argc; i++) {
-    if (ft_strcmp(argv[i], "--help") == 0) {
-      print_help();
-
-      clear_args(&args);
-
-      return 0;
-    } else if (argv[i][0] == '-') {
-      if (argv[i][1] == '-') {
-        if (check_long_option(&args, argv[i]) == 0) {
-          print_long_option_not_found(argv[i]);
-
-          return -1;
-        }
-      } else {
-        for (int j = 1; argv[i][j] != '\0'; j++) {
-          if (check_short_option(&args, argv[i][j]) == 0) {
-            print_short_option_not_found(argv[i][j]);
-
-            return -1;
-          }
-        }
-      }
-    } else {
-      args.inputs = table_push(args.inputs, ft_strdup(argv[i]));
-    }
-  }
-
-  args.inputs = (char **)bubble_sort((void **)args.inputs, &string_cmp);
-
-  /* print_options(&args); */
-  /**/
-  /* printf("Inputs:\n"); */
-  /* if (args.inputs != NULL) { */
-  /*   for (int i = 0; args.inputs[i] != NULL; i++) { */
-  /*     printf(" - %s\n", args.inputs[i]); */
-  /*   } */
-  /* } */
-  /* ft_putchar('\n'); */
+  if (parse_args(&args, argc, argv) != 0)
+    return 2;
 
   size_t inputs_len = table_length(args.inputs);
 
@@ -995,6 +1063,8 @@ int main(int argc, char **argv, char **env) {
     } else {
     }
   } else {
+    args.inputs = (char **)bubble_sort((void **)args.inputs, &string_cmp);
+
     for (int i = 0; args.inputs[i] != NULL; i++) {
       DIR *opened_dir = opendir(args.inputs[i]);
       int fd = -1;

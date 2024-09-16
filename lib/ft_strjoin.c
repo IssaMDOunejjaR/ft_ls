@@ -2,7 +2,7 @@
 
 char *ft_strjoin(char *s1, char *s2) {
   if (s1 == NULL)
-    return NULL;
+    return ft_strdup(s2);
 
   if (s2 == NULL)
     return ft_strdup(s1);
