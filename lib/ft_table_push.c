@@ -2,28 +2,17 @@
 
 char **table_push(char **table, char *value) {
   char **new_table = NULL;
+  size_t len = table_length(table);
 
-  if (table == NULL) {
-    new_table = malloc(sizeof(char *) * 2);
+  new_table = malloc(sizeof(char *) * (len + 2));
 
-    new_table[0] = value;
-    new_table[1] = NULL;
-
-    return new_table;
+  if (table != NULL) {
+    for (size_t i = 0; i < len; i++)
+      new_table[i] = ft_strdup(table[i]);
   }
 
-  new_table = malloc(sizeof(table) * (table_length(table) + 2));
-
-  int i = 0;
-
-  while (table[i] != NULL) {
-    new_table[i] = ft_strdup(table[i]);
-
-    i++;
-  }
-
-  new_table[i++] = value;
-  new_table[i] = NULL;
+  new_table[len] = value;
+  new_table[len + 1] = NULL;
 
   table_free(table);
 
