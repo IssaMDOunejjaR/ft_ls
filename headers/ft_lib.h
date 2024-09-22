@@ -1,9 +1,12 @@
 #ifndef FT_LIB
 #define FT_LIB
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+typedef bool (*CompareFunc)(void *a, void *b);
 
 void ft_putchar(int c);
 void ft_putstr(char *str);
@@ -28,5 +31,6 @@ size_t ft_number_len(int number);
 int ft_index_of_char(const char *str, char c);
 int ft_last_index_of(char *str, char c);
 int ft_is_2d_string_array_equals(char **a, char **b);
+void **ft_bubble_sort(void **list, CompareFunc cmp);
 
 #endif
