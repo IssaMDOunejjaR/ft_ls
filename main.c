@@ -1,16 +1,16 @@
 #include "headers/ft_lib.h"
 #include "headers/ft_ls.h"
 #include "libcft/ds/list/ft_list.h"
+#include "libcft/string/ft_string.h"
 #include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 RessourceType check_ressource_type(char *path) {
   struct stat lstats;
 
   if (lstat(path, &lstats) == -1) {
-    perror("lstat");
-
     return _NONE;
   }
 
@@ -44,7 +44,18 @@ char *VALID_OPTIONS[][4] = {
     {NULL, NULL},
 };
 
-int str_cmp(void *s1, void *s2) { return ft_strcmp(s1, s2); }
+char *skip_dots(char *str) {
+  int i = 0;
+
+  while (str[i] == '.')
+    i++;
+
+  return &str[i];
+}
+
+int str_cmp(void *s1, void *s2) {
+  return ft_strcmp_lowercase(skip_dots(s1), skip_dots(s2));
+}
 
 void print(void *data) { printf(" - %s\n", (char *)data); }
 
@@ -54,12 +65,6 @@ void init_args(Args *args) {
 
   args->files.list = NULL;
   args->files.size = 0;
-  args->files.values.col_widths = NULL;
-  args->files.values.terminal_width = 0;
-  args->files.values.num_columns = 1;
-  args->files.values.num_rows = 0;
-  args->files.values.gap = 2;
-  args->files.values.quote_space = 0;
 
   args->options.listing = false;
   args->options.hidden = false;
@@ -73,17 +78,24 @@ void init_args(Args *args) {
   args->options.color = false;
 }
 
-void clear_args(Args *args) {}
+void clear_args(Args *args) {
+  if (args->files.list)
+    ft_list_clear(args->files.list, &free);
+  if (args->dirs.list)
+    ft_list_clear(args->dirs.list, &free);
+}
+
+void clear_values(ColumnValues *values) {
+  if (values->col_widths)
+    free(values->col_widths);
+}
 
 int is_valid_option() { return 0; }
 
 void print_help() {
-  ft_putendl("Usage: ft_ls [OPTION]... [FILE]...");
-  ft_putendl(
-      "List information about the FILEs (the current directory by default).");
-  ft_putchar('\n');
-  ft_putendl("Mandatory arguments to long options are mandatory for short "
-             "options too.");
+  ft_putstr("Usage: ft_ls [OPTION]... [FILE]...\nList information about the "
+            "FILEs (the current directory by default).\n\nMandatory arguments "
+            "to long options are mandatory for short options too.");
 
   int start_pad = 2;
   int middle_gap = 5;
@@ -154,6 +166,7 @@ char set_option(Args *args, char c, char *opt) {
     args->options.sort = false;
     args->options.color = false;
     args->options.listing = false;
+    args->options.hidden = true;
   } else if (c == 'g') {
     args->options.owner = false;
     args->options.listing = true;
@@ -356,18 +369,6 @@ Info **list_append(Info **lst, Info *value) {
 
 typedef bool (*CompareFunc)(void *a, void *b);
 
-char *skip_dots(char *str) {
-  int i = 0;
-
-  while (str[i] == '.')
-    i++;
-
-  if (str[i] == '\0')
-    return str;
-
-  return &str[i];
-}
-
 bool info_cmp(Info *a, Info *b) {
   char *tmp_a = ft_to_lowercase(a->name);
   char *tmp_b = ft_to_lowercase(b->name);
@@ -404,255 +405,6 @@ void print_number_spaces(int number, int size) {
 
   ft_putnbr(number);
 }
-
-/* void listing_print(Args *args, char *parent_dir) { */
-/*   DIR *o_dir = opendir(parent_dir); */
-/*   struct dirent *dir; */
-/*   Info **infos = NULL; */
-/*   int gap = 1; */
-/*   int quote_space = 0; */
-/*   int link_size_column = 0; */
-/*   int owner_column = 0; */
-/*   int group_column = 0; */
-/*   int size_column = 0; */
-/*   int block_size = 0; */
-/**/
-/*   while ((dir = readdir(o_dir))) { */
-/*     if (!args->options.hidden && dir->d_name[0] == '.') */
-/*       continue; */
-/**/
-/*     Info *info = malloc(sizeof(Info)); */
-/**/
-/*     char *tmp = ft_strjoin(parent_dir, "/"); */
-/*     char *path = ft_strjoin(tmp, dir->d_name); */
-/**/
-/*     if (stat(path, &info->stats) == -1) { */
-/*       perror("stat"); */
-/**/
-/*       return; */
-/*     } */
-/**/
-/*     if (lstat(path, &info->lstats) == -1) { */
-/*       perror("lstat"); */
-/**/
-/*       return; */
-/*     } */
-/**/
-/*     if (S_ISLNK(info->lstats.st_mode)) { */
-/*       info->is_symlink = true; */
-/**/
-/*       info->owner = ft_strdup(getpwuid(info->lstats.st_uid)->pw_name); */
-/*       info->group = ft_strdup(getgrgid(info->lstats.st_gid)->gr_name); */
-/**/
-/*       size_t owner_len = ft_strlen(info->owner); */
-/**/
-/*       if (owner_len > owner_column) */
-/*         owner_column = owner_len; */
-/**/
-/*       size_t group_len = ft_strlen(info->group); */
-/**/
-/*       if (group_len > group_column) */
-/*         group_column = group_len; */
-/**/
-/*       size_t len = ft_number_len(info->lstats.st_nlink); */
-/**/
-/*       if (len > link_size_column) */
-/*         link_size_column = len; */
-/**/
-/*       size_t size_len = ft_number_len(info->lstats.st_size); */
-/**/
-/*       if (size_len > size_column) */
-/*         size_column = size_len; */
-/*     } else { */
-/*       block_size += info->stats.st_blocks; */
-/*       info->is_symlink = false; */
-/*       if (S_ISDIR(info->stats.st_mode)) { */
-/*         info->is_directory = true; */
-/*       } else if (S_ISREG(info->stats.st_mode)) { */
-/*         info->is_directory = false; */
-/*       } */
-/**/
-/*       info->owner = ft_strdup(getpwuid(info->stats.st_uid)->pw_name); */
-/*       info->group = ft_strdup(getgrgid(info->stats.st_gid)->gr_name); */
-/**/
-/*       size_t owner_len = ft_strlen(info->owner); */
-/**/
-/*       if (owner_len > owner_column) */
-/*         owner_column = owner_len; */
-/**/
-/*       size_t group_len = ft_strlen(info->group); */
-/**/
-/*       if (group_len > group_column) */
-/*         group_column = group_len; */
-/**/
-/*       size_t len = ft_number_len(info->stats.st_nlink); */
-/**/
-/*       if (len > link_size_column) */
-/*         link_size_column = len; */
-/**/
-/*       size_t size_len = ft_number_len(info->stats.st_size); */
-/**/
-/*       if (size_len > size_column) */
-/*         size_column = size_len; */
-/*     } */
-/**/
-/*     info->name = dir->d_name; */
-/**/
-/*     if (ft_strchr(dir->d_name, ' ') != NULL) */
-/*       quote_space = 1; */
-/**/
-/*     infos = list_append(infos, info); */
-/*   } */
-/**/
-/*   ft_putstr("total "); */
-/*   ft_putnbr(block_size); */
-/*   ft_putchar('\n'); */
-/*   if (infos) { */
-/*     infos = (Info **)ft_bubble_sort((void **)infos, (CompareFunc)&info_cmp);
- */
-/**/
-/*     for (int i = 0; infos[i] != NULL; i++) { */
-/*       if (infos[i]->is_symlink) { */
-/*         ft_putstr("l"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IRUSR) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWUSR) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IEXEC) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IRGRP) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWGRP) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IXGRP) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IROTH) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWOTH) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IXOTH) ? "x" : "-"); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         print_number_spaces(infos[i]->lstats.st_nlink, */
-/*                             link_size_column - */
-/*                                 ft_number_len(infos[i]->lstats.st_nlink)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         if (args->options.owner) { */
-/*           print_spaces(infos[i]->owner, */
-/*                        owner_column - ft_strlen(infos[i]->owner)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         if (args->options.group) { */
-/*           print_spaces(infos[i]->group, */
-/*                        group_column - ft_strlen(infos[i]->group)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         print_number_spaces(infos[i]->lstats.st_size, */
-/*                             size_column - */
-/*                                 ft_number_len(infos[i]->lstats.st_size)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         char *time = ctime(&infos[i]->lstats.st_mtim.tv_sec); */
-/*         char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1, */
-/*                               ft_last_index_of(time, ':') - 1); */
-/*         if (tmp != NULL) { */
-/*           ft_putstr(tmp); */
-/*           free(tmp); */
-/*         } */
-/**/
-/*         ft_putchar(' '); */
-/*         if (quote_space && ft_strchr(infos[i]->name, ' ') == NULL) */
-/*           ft_putchar(' '); */
-/**/
-/*         print_dir_name(args, infos[i]->name, 0, true, false, false); */
-/*         ft_putstr(" -> "); */
-/**/
-/*         char l_name[1000]; */
-/*         ssize_t size = readlink(infos[i]->name, l_name, sizeof(l_name) - 1);
- */
-/*         l_name[size] = '\0'; */
-/**/
-/*         if (size == -1) { */
-/*           perror("readlink"); */
-/**/
-/*           return; */
-/*         } */
-/**/
-/*         ft_putendl(l_name); */
-/*       } else { */
-/*         if (infos[i]->is_directory) */
-/*           ft_putstr("d"); */
-/*         else */
-/*           ft_putstr("-"); */
-/**/
-/*         ft_putstr((infos[i]->stats.st_mode & S_IRUSR) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWUSR) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IEXEC) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IRGRP) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWGRP) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IXGRP) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IROTH) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWOTH) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IXOTH) ? "x" : "-"); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         print_number_spaces(infos[i]->stats.st_nlink, */
-/*                             link_size_column - */
-/*                                 ft_number_len(infos[i]->stats.st_nlink)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         if (args->options.owner) { */
-/*           print_spaces(infos[i]->owner, */
-/*                        owner_column - ft_strlen(infos[i]->owner)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         if (args->options.group) { */
-/*           print_spaces(infos[i]->group, */
-/*                        group_column - ft_strlen(infos[i]->group)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         print_number_spaces(infos[i]->stats.st_size, */
-/*                             size_column - */
-/*                                 ft_number_len(infos[i]->stats.st_size)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         char *time = ctime(&infos[i]->lstats.st_mtim.tv_sec); */
-/*         char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1, */
-/*                               ft_last_index_of(time, ':') - 1); */
-/*         if (tmp != NULL) { */
-/*           ft_putstr(tmp); */
-/*           free(tmp); */
-/*         } */
-/**/
-/*         ft_putchar(' '); */
-/*         if (quote_space && ft_strchr(infos[i]->name, ' ') == NULL) */
-/*           ft_putchar(' '); */
-/**/
-/*         int is_executable = infos[i]->stats.st_mode & S_IEXEC | */
-/*                             infos[i]->stats.st_mode & S_IXGRP | */
-/*                             infos[i]->stats.st_mode & S_IXOTH; */
-/**/
-/*         print_dir_name(args, infos[i]->name, 0, false,
- * infos[i]->is_directory, */
-/*                        is_executable); */
-/*         ft_putchar('\n'); */
-/*       } */
-/**/
-/*       free(infos[i]->owner); */
-/*       free(infos[i]->group); */
-/*     } */
-/*   } */
-/**/
-/*   list_free((void **)infos); */
-/*   closedir(o_dir); */
-/* } */
 
 int parse_args(Args *args, int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
@@ -710,22 +462,19 @@ void calc_columns_values(ColumnValues *values, char **list, size_t list_size) {
     num_rows = (list_size + num_columns - 1) / num_columns;
 
     if (col_widths != NULL) {
-      if (num_columns > 1) {
-        if (tmp != NULL)
-          free(tmp);
-        size_t size = sizeof(size_t) * (num_columns - 1);
-        tmp = malloc(size);
-        if (tmp == NULL)
-          return;
-        memcpy(tmp, col_widths, size);
-      }
+      if (tmp)
+        free(tmp);
+
+      size_t size = sizeof(size_t) * (num_columns - 1);
+
+      tmp = malloc(size);
+
+      memcpy(tmp, col_widths, size);
+
       free(col_widths);
     }
 
     col_widths = malloc(sizeof(size_t) * num_columns);
-
-    if (!col_widths)
-      return;
 
     size_t total_width = values->quote_space;
 
@@ -809,17 +558,22 @@ void print_columns(Args *args, ColumnValues *values, char **list,
         char *tmp = ft_strjoin(parent_dir, "/");
         char *path = ft_strjoin(tmp, list[index]);
 
+        free(tmp);
+
         if (lstat(path, &lstats) == -1) {
+          free(path);
+          free(values->col_widths);
           perror("lstat");
           return;
         }
 
         if (stat(path, &stats) == -1) {
+          free(path);
+          free(values->col_widths);
           perror("stat");
           return;
         }
 
-        free(tmp);
         free(path);
 
         bool is_symlink = false;
@@ -887,361 +641,14 @@ void column_printing(Args *args, ColumnValues *values, char **list,
   print_columns(args, values, list, list_size, parent_dir);
 }
 
-/* void list_printing(Args *args, char **list, size_t list_size, */
-/*                    char *parent_dir) { */
-/*   DIR *o_dir = opendir(parent_dir); */
-/*   struct dirent *dir; */
-/*   Info **infos = NULL; */
-/*   int gap = 1; */
-/*   int quote_space = 0; */
-/*   int link_size_column = 0; */
-/*   int owner_column = 0; */
-/*   int group_column = 0; */
-/*   int size_column = 0; */
-/*   int block_size = 0; */
-/**/
-/*   while ((dir = readdir(o_dir))) { */
-/*     if (!args->options.hidden && dir->d_name[0] == '.') */
-/*       continue; */
-/**/
-/*     Info *info = malloc(sizeof(Info)); */
-/**/
-/*     char *tmp = ft_strjoin(parent_dir, "/"); */
-/*     char *path = ft_strjoin(tmp, dir->d_name); */
-/**/
-/*     if (stat(path, &info->stats) == -1) { */
-/*       perror("stat"); */
-/**/
-/*       return; */
-/*     } */
-/**/
-/*     if (lstat(path, &info->lstats) == -1) { */
-/*       perror("lstat"); */
-/**/
-/*       return; */
-/*     } */
-/**/
-/*     if (S_ISLNK(info->lstats.st_mode)) { */
-/*       info->is_symlink = true; */
-/**/
-/*       info->owner = ft_strdup(getpwuid(info->lstats.st_uid)->pw_name); */
-/*       info->group = ft_strdup(getgrgid(info->lstats.st_gid)->gr_name); */
-/**/
-/*       size_t owner_len = ft_strlen(info->owner); */
-/**/
-/*       if (owner_len > owner_column) */
-/*         owner_column = owner_len; */
-/**/
-/*       size_t group_len = ft_strlen(info->group); */
-/**/
-/*       if (group_len > group_column) */
-/*         group_column = group_len; */
-/**/
-/*       size_t len = ft_number_len(info->lstats.st_nlink); */
-/**/
-/*       if (len > link_size_column) */
-/*         link_size_column = len; */
-/**/
-/*       size_t size_len = ft_number_len(info->lstats.st_size); */
-/**/
-/*       if (size_len > size_column) */
-/*         size_column = size_len; */
-/*     } else { */
-/*       block_size += info->stats.st_blocks; */
-/*       info->is_symlink = false; */
-/*       if (S_ISDIR(info->stats.st_mode)) { */
-/*         info->is_directory = true; */
-/*       } else if (S_ISREG(info->stats.st_mode)) { */
-/*         info->is_directory = false; */
-/*       } */
-/**/
-/*       info->owner = ft_strdup(getpwuid(info->stats.st_uid)->pw_name); */
-/*       info->group = ft_strdup(getgrgid(info->stats.st_gid)->gr_name); */
-/**/
-/*       size_t owner_len = ft_strlen(info->owner); */
-/**/
-/*       if (owner_len > owner_column) */
-/*         owner_column = owner_len; */
-/**/
-/*       size_t group_len = ft_strlen(info->group); */
-/**/
-/*       if (group_len > group_column) */
-/*         group_column = group_len; */
-/**/
-/*       size_t len = ft_number_len(info->stats.st_nlink); */
-/**/
-/*       if (len > link_size_column) */
-/*         link_size_column = len; */
-/**/
-/*       size_t size_len = ft_number_len(info->stats.st_size); */
-/**/
-/*       if (size_len > size_column) */
-/*         size_column = size_len; */
-/*     } */
-/**/
-/*     info->name = dir->d_name; */
-/**/
-/*     if (ft_strchr(dir->d_name, ' ') != NULL) */
-/*       quote_space = 1; */
-/**/
-/*     infos = list_append(infos, info); */
-/*   } */
-/**/
-/*   ft_putstr("total "); */
-/*   ft_putnbr(block_size); */
-/*   ft_putchar('\n'); */
-/*   if (infos) { */
-/*     infos = (Info **)ft_bubble_sort((void **)infos, (CompareFunc)&info_cmp);
- */
-/**/
-/*     for (int i = 0; infos[i] != NULL; i++) { */
-/*       if (infos[i]->is_symlink) { */
-/*         ft_putstr("l"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IRUSR) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWUSR) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IEXEC) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IRGRP) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWGRP) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IXGRP) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IROTH) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IWOTH) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->lstats.st_mode & S_IXOTH) ? "x" : "-"); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         print_number_spaces(infos[i]->lstats.st_nlink, */
-/*                             link_size_column - */
-/*                                 ft_number_len(infos[i]->lstats.st_nlink)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         if (args->options.owner) { */
-/*           print_spaces(infos[i]->owner, */
-/*                        owner_column - ft_strlen(infos[i]->owner)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         if (args->options.group) { */
-/*           print_spaces(infos[i]->group, */
-/*                        group_column - ft_strlen(infos[i]->group)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         print_number_spaces(infos[i]->lstats.st_size, */
-/*                             size_column - */
-/*                                 ft_number_len(infos[i]->lstats.st_size)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         char *time = ctime(&infos[i]->lstats.st_mtim.tv_sec); */
-/*         char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1, */
-/*                               ft_last_index_of(time, ':') - 1); */
-/*         if (tmp != NULL) { */
-/*           ft_putstr(tmp); */
-/*           free(tmp); */
-/*         } */
-/**/
-/*         ft_putchar(' '); */
-/*         if (quote_space && ft_strchr(infos[i]->name, ' ') == NULL) */
-/*           ft_putchar(' '); */
-/**/
-/*         print_dir_name(args, infos[i]->name, 0, true, false, false); */
-/*         ft_putstr(" -> "); */
-/**/
-/*         char l_name[1000]; */
-/*         ssize_t size = readlink(infos[i]->name, l_name, sizeof(l_name) - 1);
- */
-/*         l_name[size] = '\0'; */
-/**/
-/*         if (size == -1) { */
-/*           perror("readlink"); */
-/**/
-/*           return; */
-/*         } */
-/**/
-/*         ft_putendl(l_name); */
-/*       } else { */
-/*         if (infos[i]->is_directory) */
-/*           ft_putstr("d"); */
-/*         else */
-/*           ft_putstr("-"); */
-/**/
-/*         ft_putstr((infos[i]->stats.st_mode & S_IRUSR) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWUSR) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IEXEC) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IRGRP) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWGRP) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IXGRP) ? "x" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IROTH) ? "r" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IWOTH) ? "w" : "-"); */
-/*         ft_putstr((infos[i]->stats.st_mode & S_IXOTH) ? "x" : "-"); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         print_number_spaces(infos[i]->stats.st_nlink, */
-/*                             link_size_column - */
-/*                                 ft_number_len(infos[i]->stats.st_nlink)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         if (args->options.owner) { */
-/*           print_spaces(infos[i]->owner, */
-/*                        owner_column - ft_strlen(infos[i]->owner)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         if (args->options.group) { */
-/*           print_spaces(infos[i]->group, */
-/*                        group_column - ft_strlen(infos[i]->group)); */
-/**/
-/*           ft_putchar(' '); */
-/*         } */
-/**/
-/*         print_number_spaces(infos[i]->stats.st_size, */
-/*                             size_column - */
-/*                                 ft_number_len(infos[i]->stats.st_size)); */
-/**/
-/*         ft_putchar(' '); */
-/**/
-/*         char *time = ctime(&infos[i]->lstats.st_mtim.tv_sec); */
-/*         char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1, */
-/*                               ft_last_index_of(time, ':') - 1); */
-/*         if (tmp != NULL) { */
-/*           ft_putstr(tmp); */
-/*           free(tmp); */
-/*         } */
-/**/
-/*         ft_putchar(' '); */
-/*         if (quote_space && ft_strchr(infos[i]->name, ' ') == NULL) */
-/*           ft_putchar(' '); */
-/**/
-/*         int is_executable = infos[i]->stats.st_mode & S_IEXEC | */
-/*                             infos[i]->stats.st_mode & S_IXGRP | */
-/*                             infos[i]->stats.st_mode & S_IXOTH; */
-/**/
-/*         print_dir_name(args, infos[i]->name, 0, false,
- * infos[i]->is_directory, */
-/*                        is_executable); */
-/*         ft_putchar('\n'); */
-/*       } */
-/**/
-/*       free(infos[i]->owner); */
-/*       free(infos[i]->group); */
-/*     } */
-/*   } */
-/* } */
-
-void dir_default_list_printing(Args *args, ColumnValues *values, char **list,
-                               size_t list_size, char *parent_dir) {
-  if (args->options.listing) {
-    /* listing_print(args, parent_dir); */
-  } else {
-    print_columns(args, values, list, list_size, parent_dir);
-  }
-}
-
-void dir_recursive_list_printing(Args *args, char *dirname, int depth) {
-  DIR *dir = opendir(dirname);
-
-  if (dir == NULL) {
-    perror("opendir");
-
-    return;
-  }
-
-  if (depth > 0)
-    ft_putchar('\n');
-
-  depth++;
-  print_dir(dirname);
-  ft_putendl(":");
-
-  /* dir_default_list_printing(args, dirname); */
-
-  DIR *sub_dir = opendir(dirname);
-
-  if (sub_dir == NULL) {
-    perror("opendir");
-
-    return;
-  }
-
-  struct dirent *dir_content;
-
-  while ((dir_content = readdir(sub_dir))) {
-    if (!args->options.hidden && dir_content->d_name[0] == '.')
-      continue;
-
-    char *tmp = ft_strjoin(dirname, "/");
-    char *name = ft_strjoin(tmp, dir_content->d_name);
-
-    free(tmp);
-
-    struct stat statbuf;
-
-    if (stat(name, &statbuf) == 0 && S_ISDIR(statbuf.st_mode)) {
-      if (strcmp(dir_content->d_name, ".") != 0 &&
-          strcmp(dir_content->d_name, "..") != 0) {
-        dir_recursive_list_printing(args, name, depth);
-      }
-    }
-
-    free(name);
-  }
-
-  closedir(sub_dir);
-}
-
-void dir_list_printing(Args *args, char *dirname) {
-  if (args->options.recursive)
-    dir_recursive_list_printing(args, dirname, 0);
-  /* else */
-  /* dir_default_list_printing(args, dirname); */
-}
-
-void print_dir_content(Args *args, char *dirname) {
-  DIR *open_dir = opendir(dirname);
-
-  if (!open_dir) {
-    perror("opendir");
-
-    return;
-  }
-
-  List *content = NULL;
-  size_t length = 0;
-  struct dirent *dir = NULL;
-  ColumnValues values;
-
-  init_columns_values(&values);
-
-  while ((dir = readdir(open_dir))) {
-    if (args->options.sort)
-      ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
-    else
-      ft_list_push_back(&content, ft_strdup(dir->d_name));
-    length++;
-  }
-
-  if (args->options.listing) {
-
-  } else {
-    char **list = ft_list_to_strs(content, length);
-
-    ft_list_clear(content, &free);
-    column_printing(args, &values, list, length, dirname);
-  }
-}
-
 void list_detail_printing(Args *args, ColumnValues *values, List *list,
-                          size_t list_size) {
+                          size_t list_size, bool is_files) {
 
-  ft_putstr("total ");
-  ft_putnbr(values->block_size);
-  ft_putchar('\n');
+  if (!is_files) {
+    ft_putstr("total ");
+    ft_putnbr(values->block_size);
+    ft_putchar('\n');
+  }
 
   List *content = values->info;
 
@@ -1386,47 +793,248 @@ void list_detail_printing(Args *args, ColumnValues *values, List *list,
   }
 }
 
-void calc_list_values() {}
+void calc_list_values(Args *args, ColumnValues *values, List *list,
+                      size_t list_size, char *parent_dir, bool is_files) {
+  while (list != NULL) {
+    char *name = list->data;
+
+    if (!is_files) {
+      if (!args->options.hidden && name[0] == '.') {
+        list = list->next;
+
+        continue;
+      }
+    }
+
+    Info *info = malloc(sizeof(Info));
+
+    char *tmp = ft_strjoin(parent_dir, "/");
+    char *path = ft_strjoin(tmp, name);
+
+    if (stat(path, &info->stats) == -1) {
+      perror("stat");
+
+      return;
+    }
+
+    if (lstat(path, &info->lstats) == -1) {
+      perror("lstat");
+
+      return;
+    }
+
+    if (S_ISLNK(info->lstats.st_mode)) {
+      info->is_symlink = true;
+
+      info->owner = ft_strdup(getpwuid(info->lstats.st_uid)->pw_name);
+      info->group = ft_strdup(getgrgid(info->lstats.st_gid)->gr_name);
+
+      size_t owner_len = ft_strlen(info->owner);
+
+      if (owner_len > values->owner_column)
+        values->owner_column = owner_len;
+
+      size_t group_len = ft_strlen(info->group);
+
+      if (group_len > values->group_column)
+        values->group_column = group_len;
+
+      size_t len = ft_number_len(info->lstats.st_nlink);
+
+      if (len > values->link_size_column)
+        values->link_size_column = len;
+
+      size_t size_len = ft_number_len(info->lstats.st_size);
+
+      if (size_len > values->size_column)
+        values->size_column = size_len;
+    } else {
+      values->block_size += info->stats.st_blocks;
+      info->is_symlink = false;
+      if (S_ISDIR(info->stats.st_mode)) {
+        info->is_directory = true;
+      } else if (S_ISREG(info->stats.st_mode)) {
+        info->is_directory = false;
+      }
+
+      info->owner = ft_strdup(getpwuid(info->stats.st_uid)->pw_name);
+      info->group = ft_strdup(getgrgid(info->stats.st_gid)->gr_name);
+
+      size_t owner_len = ft_strlen(info->owner);
+
+      if (owner_len > values->owner_column)
+        values->owner_column = owner_len;
+
+      size_t group_len = ft_strlen(info->group);
+
+      if (group_len > values->group_column)
+        values->group_column = group_len;
+
+      size_t len = ft_number_len(info->stats.st_nlink);
+
+      if (len > values->link_size_column)
+        values->link_size_column = len;
+
+      size_t size_len = ft_number_len(info->stats.st_size);
+
+      if (size_len > values->size_column)
+        values->size_column = size_len;
+    }
+
+    info->name = name;
+
+    if (ft_strchr(name, ' ') != NULL)
+      values->quote_space = 1;
+
+    ft_list_push_back(&values->info, info);
+
+    list = list->next;
+  }
+}
 
 void list_printing(Args *args, ColumnValues *values, List *list,
-                   size_t list_size) {
+                   size_t list_size, char *parent_dir, bool is_files) {
   init_columns_values(values);
 
-  calc_list_values(values, list, list_size);
+  calc_list_values(args, values, list, list_size, parent_dir, is_files);
 
-  list_detail_printing(args, values, list, list_size);
+  list_detail_printing(args, values, list, list_size, is_files);
+}
+
+void print_dir_content(Args *args, char *dirname, int depth) {
+  DIR *open_dir = opendir(dirname);
+
+  if (!open_dir) {
+    perror("opendir");
+
+    return;
+  }
+
+  List *content = NULL;
+  size_t length = 0;
+  struct dirent *dir = NULL;
+  ColumnValues values;
+
+  if (args->options.recursive) {
+    if (depth > 0)
+      ft_putchar('\n');
+
+    depth++;
+    print_dir(dirname);
+    ft_putendl(":");
+  }
+
+  while ((dir = readdir(open_dir))) {
+    if (!args->options.hidden && dir->d_name[0] == '.')
+      continue;
+
+    if (args->options.sort)
+      ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
+    else
+      ft_list_push_back(&content, ft_strdup(dir->d_name));
+    length++;
+  }
+
+  closedir(open_dir);
+
+  if (args->options.listing)
+    list_printing(args, &values, content, length, dirname, false);
+  else {
+    char **list = ft_list_to_strs(content, length);
+
+    column_printing(args, &values, list, length, dirname);
+
+    table_free(list);
+  }
+
+  List *head = content;
+
+  if (args->options.recursive) {
+    while (content != NULL) {
+      if (ft_strcmp(content->data, ".") == 0 ||
+          ft_strcmp(content->data, "..") == 0) {
+        content = content->next;
+
+        continue;
+      }
+
+      char *tmp = ft_strjoin(dirname, "/");
+      char *name = ft_strjoin(tmp, content->data);
+
+      free(tmp);
+
+      if (check_ressource_type(name) != _DIR) {
+        free(name);
+        content = content->next;
+
+        continue;
+      }
+
+      print_dir_content(args, name, depth);
+
+      free(name);
+
+      content = content->next;
+    }
+  }
+
+  ft_list_clear(head, &free);
 }
 
 void process_inputs(Args *args, char *parent_dir, bool is_files) {
   if (is_files) {
-    char **list = ft_list_to_strs(args->files.list, args->files.size);
+    if (args->options.listing)
+      list_printing(args, &args->files.values, args->files.list,
+                    args->files.size, parent_dir, true);
+    else {
+      char **list = ft_list_to_strs(args->files.list, args->files.size);
 
-    ft_list_clear(args->files.list, &free);
-
-    if (args->options.listing) {
-    } else
       column_printing(args, &args->files.values, list, args->files.size,
                       parent_dir);
 
-    list_free((void **)list);
+      list_free((void **)list);
+    }
   } else {
     List *list = args->dirs.list;
 
-    while (list != NULL) {
-      if (!args->options.recursive) {
-        ft_putstr(list->data);
-        ft_putstr(":\n");
+    if (!list)
+      print_dir_content(args, ".", 0);
+    else {
+      while (list != NULL) {
+        if (!args->options.recursive) {
+          ft_putstr(list->data);
+          ft_putstr(":\n");
+        }
+
+        print_dir_content(args, list->data, 0);
+
+        if (list->next != NULL)
+          ft_putchar('\n');
+
+        list = list->next;
       }
-
-      print_dir_content(args, list->data);
-
-      /* dir_list_printing(args, list->data); */
-
-      if (list->next != NULL)
-        ft_putchar('\n');
-
-      list = list->next;
     }
+  }
+}
+
+void process_directories(Args *args) {
+  if (args->dirs.list) {
+    if (args->dirs.size > 1 && args->options.sort)
+      ft_list_sort(&args->dirs.list, &str_cmp);
+
+    process_inputs(args, ".", false);
+  }
+}
+
+void process_files(Args *args) {
+  if (args->files.list) {
+    if (args->files.size > 1 && args->options.sort)
+      ft_list_sort(&args->files.list, &str_cmp);
+
+    process_inputs(args, ".", true);
+
+    if (args->dirs.list)
+      ft_putchar('\n');
   }
 }
 
@@ -1446,27 +1054,13 @@ int main(int argc, char **argv, char **env) {
     return 2;
 
   if (args.dirs.size == 0 && args.files.size == 0)
-    dir_list_printing(&args, ".");
+    process_inputs(&args, ".", false);
   else {
-    if (args.files.list) {
-      if (args.files.size > 1 && args.options.sort)
-        ft_list_sort(&args.files.list, &str_cmp);
-
-      process_inputs(&args, ".", true);
-
-      if (args.dirs.list)
-        ft_putchar('\n');
-    }
-
-    if (args.dirs.list) {
-      if (args.dirs.size > 1 && args.options.sort)
-        ft_list_sort(&args.dirs.list, &str_cmp);
-
-      process_inputs(&args, ".", false);
-    }
+    process_files(&args);
+    process_directories(&args);
   }
 
-  /* clear_args(&args); */
+  clear_args(&args);
 
   return 0;
 }
