@@ -12,7 +12,7 @@ FLAGS			= -Wall -Wextra -Werror -I ./headers
 all: $(EXEC)
 
 $(EXEC): lib $(OBJS)
-	gcc main.c ./libcft/ds/list/ft_list.a $(OBJS) $(LIB_NAME) -o $(EXEC) 
+	gcc main.c ./libcft/ds/list/ft_list.a ./libcft/string/ft_string.a $(OBJS) $(LIB_NAME) -o $(EXEC) 
 
 lib: $(LIB_OBJS)
 	ar rcs $(LIB_NAME) $(LIB_OBJS)
