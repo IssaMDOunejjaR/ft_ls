@@ -95,7 +95,7 @@ int is_valid_option() { return 0; }
 void print_help() {
   ft_putstr("Usage: ft_ls [OPTION]... [FILE]...\nList information about the "
             "FILEs (the current directory by default).\n\nMandatory arguments "
-            "to long options are mandatory for short options too.");
+            "to long options are mandatory for short options too.\n");
 
   int start_pad = 2;
   int middle_gap = 5;
@@ -413,7 +413,7 @@ int parse_args(Args *args, int argc, char **argv) {
 
       clear_args(args);
 
-      return 0;
+      exit(0);
     } else if (argv[i][0] == '-') {
       if (argv[i][1] == '-') {
         if (check_long_option(args, argv[i]) == 0) {
