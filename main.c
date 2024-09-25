@@ -1,11 +1,11 @@
 #include "headers/ft_lib.h"
 #include "headers/ft_ls.h"
 #include "libcft/ds/list/ft_list.h"
-#include "libcft/string/ft_string.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 RessourceType check_ressource_type(char *path) {
   struct stat lstats;
@@ -26,23 +26,130 @@ RessourceType check_ressource_type(char *path) {
 
 char *VALID_OPTIONS[][4] = {
     {"-a", "--all", "do not ignore entries starting with .", NULL},
+    {"-A", "--almost_all", "do not list implied . and ..", NULL},
+    {NULL, "--author", "with -l, print the author of each file", NULL},
     {NULL, "--color", "color the output", NULL},
     {"-d", "--directory", "list directories themselves, not their contents",
      NULL},
     {"-f", NULL, "do not sort, enable -aU, disable -ls --color", NULL},
     {"-g", NULL, "like -l, but do not list owner", NULL},
     {"-G", "--no-group", "in a long listing, don't print group names", NULL},
+    {"-h", "--human-readable",
+     "with -l and -s, print sizes like 1K 234M 2G etc.", NULL},
     {"-l", NULL, "use a long listing format", NULL},
+    {"-N", "--literal", "print entry names without quoting", NULL},
+    {"-o", NULL, "like -l, but do not list group information", NULL},
     {"-r", "--reverse", "reverse order while sorting", NULL},
     {"-R", "--recursive", "list subdirectories recursively", NULL},
+    {"-S", NULL, "sort by file size, largest first", NULL},
     {"-t", NULL, "sort by time, newest first; see --time", NULL},
     {"-u", NULL,
      "with  -lt: sort by, and show, access time; with -l: show access time and "
      "sort by name; otherwise: sort by acces time, newest first",
      NULL},
+    {"-U", NULL, "do not sort; list entries in directory order", NULL},
+    {"-x", NULL, "list entries by lines instead of by columns", NULL},
+    {"-1", NULL, "list one file per line", NULL},
 
     {NULL, NULL},
 };
+
+void sort_list_by_time(List **begin_list, char *parent_dir,
+                       int (*cmp)(void *, void *)) {
+  if (!begin_list || !*begin_list || !cmp)
+    return;
+
+  int is_sorted = 0;
+
+  while (!is_sorted) {
+    List *list = *begin_list;
+    List *prev = NULL;
+
+    is_sorted = 1;
+
+    while (list != NULL) {
+      List *current = list;
+      List *next = current->next;
+
+      if (next) {
+        char *tmp = ft_strjoin(parent_dir, "/");
+        char *s1 = ft_strjoin(tmp, next->data);
+        char *s2 = ft_strjoin(tmp, current->data);
+
+        if (cmp(s1, s2) < 0) {
+          List *first = current;
+          List *second = next;
+
+          first->next = second->next;
+          second->next = first;
+
+          if (prev)
+            prev->next = second;
+          else
+            *begin_list = second;
+
+          prev = second;
+          list = second;
+
+          is_sorted = 0;
+        }
+
+        free(tmp);
+        free(s1);
+        free(s2);
+      } else
+        prev = current;
+
+      list = list->next;
+    }
+  }
+}
+
+void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
+                                int (*cmp)(void *, void *)) {
+  if (!begin_list || !data || !cmp)
+    return;
+
+  List *current = *begin_list;
+  List *prev = NULL;
+
+  if (!current) {
+    ft_list_push_front(begin_list, data);
+
+    return;
+  }
+
+  char *tmp = ft_strjoin(parent_dir, "/");
+  char *s1 = ft_strjoin(tmp, data);
+  char *s2 = ft_strjoin(tmp, current->data);
+
+  if (cmp(s1, s2) >= 0) {
+    ft_list_push_front(begin_list, data);
+
+    free(tmp);
+    free(s1);
+    free(s2);
+
+    return;
+  }
+
+  while (current != NULL && cmp(s1, s2) <= 0) {
+    prev = current;
+    current = current->next;
+
+    if (current)
+      s2 = ft_strjoin(tmp, current->data);
+  }
+
+  free(tmp);
+  free(s1);
+  free(s2);
+
+  List *new_node = ft_create_elem(data);
+
+  prev->next = new_node;
+  new_node->next = current;
+}
 
 char *skip_dots(char *str) {
   int i = 0;
@@ -55,6 +162,29 @@ char *skip_dots(char *str) {
 
 int str_cmp(void *s1, void *s2) {
   return ft_strcmp_lowercase(skip_dots(s1), skip_dots(s2));
+}
+
+int time_cmp(void *s1, void *s2) {
+  struct stat s1_lstat, s2_lstat;
+
+  if (lstat(s1, &s1_lstat) == -1 || lstat(s2, &s2_lstat) == -1) {
+    perror("lstat");
+
+    return 0;
+  }
+
+  long long s1_time_ns =
+      (s1_lstat.st_mtim.tv_sec * 1000000000) + s1_lstat.st_mtim.tv_nsec;
+  long long s2_time_ns =
+      (s2_lstat.st_mtim.tv_sec * 1000000000) + s2_lstat.st_mtim.tv_nsec;
+  long long result = s1_time_ns - s2_time_ns;
+
+  if (result < 0)
+    return -1;
+  else if (result > 0)
+    return 1;
+
+  return 0;
 }
 
 void print(void *data) { printf(" - %s\n", (char *)data); }
@@ -116,17 +246,18 @@ void print_help() {
     for (int j = 0; j < start_pad; j++)
       ft_putchar(' ');
 
-    if (VALID_OPTIONS[i][0] != NULL) {
+    if (VALID_OPTIONS[i][0] != NULL)
       ft_putstr(VALID_OPTIONS[i][0]);
+
+    if (VALID_OPTIONS[i][0] != NULL && VALID_OPTIONS[i][1] != NULL)
       ft_putstr(", ");
-    }
 
     if (VALID_OPTIONS[i][1] != NULL)
       ft_putstr(VALID_OPTIONS[i][1]);
 
     size_t option_len = ft_strlen(VALID_OPTIONS[i][0]) +
                         ft_strlen(VALID_OPTIONS[i][1]) +
-                        (VALID_OPTIONS[i][0] ? 2 : 0);
+                        (VALID_OPTIONS[i][0] && VALID_OPTIONS[i][1] ? 2 : 0);
 
     for (int j = 0; j < (left_pad - option_len - start_pad) + middle_gap; j++)
       ft_putchar(' ');
@@ -341,32 +472,6 @@ void list_free(void **lst) {
   free(lst);
 }
 
-Info **list_append(Info **lst, Info *value) {
-  Info **new_list = NULL;
-
-  if (lst == NULL) {
-    new_list = malloc(sizeof(Info *) * 2);
-
-    new_list[0] = value;
-    new_list[1] = NULL;
-
-    return new_list;
-  }
-
-  new_list = malloc(sizeof(Info *) * (list_size((void **)lst) + 2));
-  int i;
-
-  for (i = 0; lst[i] != NULL; i++)
-    new_list[i] = lst[i];
-
-  new_list[i++] = value;
-  new_list[i] = NULL;
-
-  free(lst);
-
-  return new_list;
-}
-
 typedef bool (*CompareFunc)(void *a, void *b);
 
 bool info_cmp(Info *a, Info *b) {
@@ -434,13 +539,19 @@ int parse_args(Args *args, int argc, char **argv) {
       RessourceType rs = check_ressource_type(argv[i]);
 
       if (rs == _DIR) {
-        if (args->options.sort)
+        if (args->options.sort_by_time)
+          ft_sorted_list_insert(&args->dirs.list, ft_strdup(argv[i]),
+                                &time_cmp);
+        else if (args->options.sort)
           ft_sorted_list_insert(&args->dirs.list, ft_strdup(argv[i]), &str_cmp);
         else
           ft_list_push_back(&args->dirs.list, ft_strdup(argv[i]));
         args->dirs.size++;
       } else if (rs == _FILE || rs == _SYMLIK) {
-        if (args->options.sort)
+        if (args->options.sort_by_time)
+          ft_sorted_list_insert(&args->files.list, ft_strdup(argv[i]),
+                                &time_cmp);
+        else if (args->options.sort)
           ft_sorted_list_insert(&args->files.list, ft_strdup(argv[i]),
                                 &str_cmp);
         else
@@ -928,10 +1039,14 @@ void print_dir_content(Args *args, char *dirname, int depth) {
     if (!args->options.hidden && dir->d_name[0] == '.')
       continue;
 
-    if (args->options.sort)
+    if (args->options.sort_by_time)
+      sorted_list_insert_by_time(&content, dirname, ft_strdup(dir->d_name),
+                                 &time_cmp);
+    else if (args->options.sort)
       ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
     else
       ft_list_push_back(&content, ft_strdup(dir->d_name));
+
     length++;
   }
 
@@ -1019,8 +1134,12 @@ void process_inputs(Args *args, char *parent_dir, bool is_files) {
 
 void process_directories(Args *args) {
   if (args->dirs.list) {
-    if (args->dirs.size > 1 && args->options.sort)
-      ft_list_sort(&args->dirs.list, &str_cmp);
+    if (args->dirs.size > 1) {
+      if (args->options.sort_by_time)
+        ft_list_sort(&args->dirs.list, &time_cmp);
+      else if (args->options.sort)
+        ft_list_sort(&args->dirs.list, &str_cmp);
+    }
 
     process_inputs(args, ".", false);
   }
@@ -1028,8 +1147,12 @@ void process_directories(Args *args) {
 
 void process_files(Args *args) {
   if (args->files.list) {
-    if (args->files.size > 1 && args->options.sort)
-      ft_list_sort(&args->files.list, &str_cmp);
+    if (args->files.size > 1) {
+      if (args->options.sort_by_time)
+        ft_list_sort(&args->files.list, &time_cmp);
+      else if (args->options.sort)
+        ft_list_sort(&args->files.list, &str_cmp);
+    }
 
     process_inputs(args, ".", true);
 
