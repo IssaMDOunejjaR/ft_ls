@@ -123,7 +123,7 @@ void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
   char *s1 = ft_strjoin(tmp, data);
   char *s2 = ft_strjoin(tmp, current->data);
 
-  if (cmp(s1, s2) >= 0) {
+  if (cmp(s1, s2) < 0) {
     ft_list_push_front(begin_list, data);
 
     free(tmp);
@@ -133,7 +133,7 @@ void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
     return;
   }
 
-  while (current != NULL && cmp(s1, s2) <= 0) {
+  while (current != NULL && cmp(s1, s2) >= 0) {
     prev = current;
     current = current->next;
 
@@ -180,9 +180,9 @@ int time_cmp(void *s1, void *s2) {
   long long result = s1_time_ns - s2_time_ns;
 
   if (result < 0)
-    return -1;
-  else if (result > 0)
     return 1;
+  else if (result > 0)
+    return -1;
 
   return 0;
 }
@@ -295,9 +295,11 @@ char set_option(Args *args, char c, char *opt) {
     args->options.directory = true;
   } else if (c == 'f') {
     args->options.sort = false;
+    args->options.sort_by_time = false;
     args->options.color = false;
     args->options.listing = false;
     args->options.hidden = true;
+    args->options.reverse = false;
   } else if (c == 'g') {
     args->options.owner = false;
     args->options.listing = true;
@@ -310,6 +312,8 @@ char set_option(Args *args, char c, char *opt) {
   } else if (c == 't') {
     args->options.sort_by_time = true;
   } else if (c == 'u') {
+  } else if (c == 'U') {
+    args->options.sort = false;
   } else if (c == 'G') {
     args->options.group = false;
   } else {
@@ -539,23 +543,10 @@ int parse_args(Args *args, int argc, char **argv) {
       RessourceType rs = check_ressource_type(argv[i]);
 
       if (rs == _DIR) {
-        if (args->options.sort_by_time)
-          ft_sorted_list_insert(&args->dirs.list, ft_strdup(argv[i]),
-                                &time_cmp);
-        else if (args->options.sort)
-          ft_sorted_list_insert(&args->dirs.list, ft_strdup(argv[i]), &str_cmp);
-        else
-          ft_list_push_back(&args->dirs.list, ft_strdup(argv[i]));
+        ft_list_push_back(&args->dirs.list, ft_strdup(argv[i]));
         args->dirs.size++;
       } else if (rs == _FILE || rs == _SYMLIK) {
-        if (args->options.sort_by_time)
-          ft_sorted_list_insert(&args->files.list, ft_strdup(argv[i]),
-                                &time_cmp);
-        else if (args->options.sort)
-          ft_sorted_list_insert(&args->files.list, ft_strdup(argv[i]),
-                                &str_cmp);
-        else
-          ft_list_push_back(&args->files.list, ft_strdup(argv[i]));
+        ft_list_push_back(&args->files.list, ft_strdup(argv[i]));
         args->files.size++;
       } else
         input_not_found(argv[i]);
@@ -1052,6 +1043,9 @@ void print_dir_content(Args *args, char *dirname, int depth) {
 
   closedir(open_dir);
 
+  if (args->options.reverse)
+    ft_list_reverse(&content);
+
   if (args->options.listing)
     list_printing(args, &values, content, length, dirname, false);
   else {
@@ -1116,7 +1110,7 @@ void process_inputs(Args *args, char *parent_dir, bool is_files) {
       print_dir_content(args, ".", 0);
     else {
       while (list != NULL) {
-        if (!args->options.recursive) {
+        if (!args->options.recursive && args->dirs.size > 1) {
           ft_putstr(list->data);
           ft_putstr(":\n");
         }
@@ -1139,6 +1133,9 @@ void process_directories(Args *args) {
         ft_list_sort(&args->dirs.list, &time_cmp);
       else if (args->options.sort)
         ft_list_sort(&args->dirs.list, &str_cmp);
+
+      if (args->options.reverse)
+        ft_list_reverse(&args->dirs.list);
     }
 
     process_inputs(args, ".", false);
@@ -1152,6 +1149,9 @@ void process_files(Args *args) {
         ft_list_sort(&args->files.list, &time_cmp);
       else if (args->options.sort)
         ft_list_sort(&args->files.list, &str_cmp);
+
+      if (args->options.reverse)
+        ft_list_reverse(&args->files.list);
     }
 
     process_inputs(args, ".", true);
@@ -1162,13 +1162,6 @@ void process_files(Args *args) {
 }
 
 int main(int argc, char **argv, char **env) {
-  /* for (int i = 0; env[i] != NULL; i++) { */
-  /*   char **tmp = ft_split(env[i], '='); */
-  /**/
-  /*   if (ft_strcmp(tmp[0], "HOME") == 0) */
-  /*     printf("%s\n", env[i]); */
-  /* } */
-
   Args args;
 
   init_args(&args);
