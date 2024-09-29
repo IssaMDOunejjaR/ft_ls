@@ -1,6 +1,8 @@
 #include "headers/ft_lib.h"
 #include "headers/ft_ls.h"
 #include "libcft/ds/list/ft_list.h"
+#include "libcft/number/ft_number.h"
+#include "libcft/string/ft_string.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,9 +74,9 @@ void sort_list_by_time(List **begin_list, char *parent_dir,
       List *next = current->next;
 
       if (next) {
-        char *tmp = ft_strjoin(parent_dir, "/");
-        char *s1 = ft_strjoin(tmp, next->data);
-        char *s2 = ft_strjoin(tmp, current->data);
+        char *tmp = ft_strjoin(parent_dir, ft_strdup("/"));
+        char *s1 = ft_strjoin(tmp, ft_strdup(next->data));
+        char *s2 = ft_strjoin(tmp, ft_strdup(current->data));
 
         if (cmp(s1, s2) < 0) {
           List *first = current;
@@ -105,7 +107,7 @@ void sort_list_by_time(List **begin_list, char *parent_dir,
   }
 }
 
-void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
+void sorted_list_insert_by_time(List **begin_list, char *parent_dir, void *data,
                                 int (*cmp)(void *, void *)) {
   if (!begin_list || !data || !cmp)
     return;
@@ -119,9 +121,9 @@ void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
     return;
   }
 
-  char *tmp = ft_strjoin(parent_dir, "/");
-  char *s1 = ft_strjoin(tmp, data);
-  char *s2 = ft_strjoin(tmp, current->data);
+  char *tmp = ft_strjoin(parent_dir, ft_strdup("/"));
+  char *s1 = ft_strjoin(tmp, ft_strdup(data));
+  char *s2 = ft_strjoin(tmp, ft_strdup(current->data));
 
   if (cmp(s1, s2) < 0) {
     ft_list_push_front(begin_list, data);
@@ -138,7 +140,7 @@ void sorted_list_insert_by_time(List **begin_list, char *parent_dir, char *data,
     current = current->next;
 
     if (current)
-      s2 = ft_strjoin(tmp, current->data);
+      s2 = ft_strjoin(tmp, ft_strdup(current->data));
   }
 
   free(tmp);
@@ -160,8 +162,32 @@ char *skip_dots(char *str) {
   return &str[i];
 }
 
+int info_str_cmp(void *s1, void *s2) {
+  Info *i1 = s1, *i2 = s2;
+
+  return ft_strcmp_lowercase(skip_dots(i1->name), skip_dots(i2->name));
+}
+
 int str_cmp(void *s1, void *s2) {
   return ft_strcmp_lowercase(skip_dots(s1), skip_dots(s2));
+}
+
+int info_time_cmp(void *s1, void *s2) {
+  Info *i1 = s1, *i2 = s2;
+  struct stat s1_lstat = i1->lstats, s2_lstat = i2->lstats;
+
+  long long s1_time_ns =
+      (s1_lstat.st_mtim.tv_sec * 1000000000) + s1_lstat.st_mtim.tv_nsec;
+  long long s2_time_ns =
+      (s2_lstat.st_mtim.tv_sec * 1000000000) + s2_lstat.st_mtim.tv_nsec;
+  long long result = s1_time_ns - s2_time_ns;
+
+  if (result < 0)
+    return 1;
+  else if (result > 0)
+    return -1;
+
+  return 0;
 }
 
 int time_cmp(void *s1, void *s2) {
@@ -444,16 +470,6 @@ void input_not_found(char *input) {
   free(msg);
 }
 
-typedef struct {
-  bool is_directory;
-  bool is_symlink;
-  struct stat stats;
-  struct stat lstats;
-  char *owner;
-  char *group;
-  char *name;
-} Info;
-
 size_t list_size(void **lst) {
   size_t size = 0;
 
@@ -657,8 +673,8 @@ void print_columns(Args *args, ColumnValues *values, char **list,
           spaces--;
 
         struct stat lstats, stats;
-        char *tmp = ft_strjoin(parent_dir, "/");
-        char *path = ft_strjoin(tmp, list[index]);
+        char *tmp = ft_strjoin(parent_dir, ft_strdup("/"));
+        char *path = ft_strjoin(tmp, ft_strdup(list[index]));
 
         free(tmp);
 
@@ -720,6 +736,9 @@ unsigned long get_terminal_width() {
 }
 
 void init_columns_values(ColumnValues *values) {
+  if (!values)
+    return;
+
   values->gap = 2;
   values->num_rows = 0;
   values->num_columns = 1;
@@ -743,8 +762,11 @@ void column_printing(Args *args, ColumnValues *values, char **list,
   print_columns(args, values, list, list_size, parent_dir);
 }
 
-void list_detail_printing(Args *args, ColumnValues *values, List *list,
-                          size_t list_size, bool is_files) {
+char *get_permission(bool condition, char *value) {
+  return condition ? ft_strdup(value) : ft_strdup("-");
+}
+
+void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
 
   if (!is_files) {
     ft_putstr("total ");
@@ -755,62 +777,166 @@ void list_detail_printing(Args *args, ColumnValues *values, List *list,
   List *content = values->info;
 
   while (content != NULL) {
+    char *out = NULL;
     Info *infos = content->data;
 
+    if (infos->is_symlink)
+      out = ft_strjoin(out, ft_strdup("l"));
+    /* ft_putstr("l"); */
+    else if (infos->is_directory)
+      out = ft_strjoin(out, ft_strdup("d"));
+    /* ft_putstr("d"); */
+    else
+      out = ft_strjoin(out, ft_strdup("-"));
+    /* ft_putstr("-"); */
+
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IRUSR, "r"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWUSR, "w"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IEXEC, "x"));
+
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IRGRP, "r"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWGRP, "w"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IXGRP, "x"));
+
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IROTH, "r"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWOTH, "w"));
+    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IXOTH, "x"));
+
+    /* ft_putstr((infos->lstats.st_mode & S_IRUSR) ? "r" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IWUSR) ? "w" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IEXEC) ? "x" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IRGRP) ? "r" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IWGRP) ? "w" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IXGRP) ? "x" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IROTH) ? "r" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IWOTH) ? "w" : "-"); */
+    /* ft_putstr((infos->lstats.st_mode & S_IXOTH) ? "x" : "-"); */
+
+    out = ft_strjoin(out, ft_strdup(" "));
+    /* ft_putchar(' '); */
+
+    size_t size =
+        values->link_size_column - ft_long_len(infos->lstats.st_nlink);
+
+    while (size > 0) {
+      out = ft_strjoin(out, ft_strdup(" "));
+      /* ft_putchar(' '); */
+
+      size--;
+    }
+
+    char *number = ft_itoa(infos->lstats.st_nlink);
+    out = ft_strjoin(out, number);
+
+    /* print_number_spaces(infos->lstats.st_nlink, values->link_size_column -
+     * ft_number_len(infos->lstats.st_nlink)); */
+
+    out = ft_strjoin(out, ft_strdup(" "));
+    /* ft_putchar(' '); */
+
+    if (args->options.owner) {
+      out = ft_strjoin(out, ft_strdup(infos->owner));
+
+      size = values->owner_column - ft_strlen(infos->owner);
+
+      while (size > 0) {
+        out = ft_strjoin(out, ft_strdup(" "));
+        /* ft_putchar(' '); */
+
+        size--;
+      }
+      /* print_spaces(infos->owner, */
+      /*              values->owner_column - ft_strlen(infos->owner)); */
+
+      out = ft_strjoin(out, ft_strdup(" "));
+      /* ft_putchar(' '); */
+    }
+
+    if (args->options.group) {
+      out = ft_strjoin(out, ft_strdup(infos->group));
+
+      size = values->group_column - ft_strlen(infos->group);
+
+      while (size > 0) {
+        out = ft_strjoin(out, ft_strdup(" "));
+        /* ft_putchar(' '); */
+
+        size--;
+      }
+      /* print_spaces(infos->group, */
+      /*              values->group_column - ft_strlen(infos->group)); */
+
+      out = ft_strjoin(out, ft_strdup(" "));
+      /* ft_putchar(' '); */
+    }
+
+    size = values->size_column - ft_number_len(infos->lstats.st_size);
+
+    while (size > 0) {
+      out = ft_strjoin(out, ft_strdup(" "));
+      /* ft_putchar(' '); */
+
+      size--;
+    }
+
+    number = ft_itoa(infos->lstats.st_size);
+    out = ft_strjoin(out, number);
+
+    /* print_number_spaces(infos->lstats.st_size, */
+    /*                     values->size_column - */
+    /*                         ft_number_len(infos->lstats.st_size)); */
+
+    out = ft_strjoin(out, ft_strdup(" "));
+    /* ft_putchar(' '); */
+
+    char *time = ctime(&infos->lstats.st_mtim.tv_sec);
+    char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1,
+                          ft_last_index_of(time, ':') - 1);
+    if (tmp != NULL) {
+      out = ft_strjoin(out, tmp);
+      /* ft_putstr(tmp); */
+      /* free(tmp); */
+    }
+
+    out = ft_strjoin(out, ft_strdup(" "));
+    /* ft_putchar(' '); */
+
+    if (values->quote_space && ft_strchr(infos->name, ' ') == NULL)
+      out = ft_strjoin(out, ft_strdup(" "));
+    /* ft_putchar(' '); */
+
+    char *colors[] = {FILE_COLOR, DIRECTORY_COLOR, SYMLINK_COLOR, EXECUTABLE};
+
+    bool is_executable = infos->lstats.st_mode & S_IEXEC |
+                         infos->lstats.st_mode & S_IXGRP |
+                         infos->lstats.st_mode & S_IXOTH;
+
+    int index = args->options.color
+                    ? infos->is_symlink
+                          ? 2
+                          : (infos->is_directory ? 1 : (is_executable ? 3 : 0))
+                    : 0;
+
+    out = ft_strjoin(out, ft_strdup(colors[index]));
+    /* ft_putstr(colors[index]); */
+
+    out = ft_strjoin(out, ft_strdup(infos->name));
+    /* print_dir(dirname); */
+
+    out = ft_strjoin(out, ft_strdup(WHITE));
+    /* ft_putstr(WHITE); */
+
+    while (size > 0) {
+      out = ft_strjoin(out, ft_strdup(" "));
+      /* ft_putchar(' '); */
+
+      size--;
+    }
+    /* print_dir_name(args, infos->name, 0, true, false, false); */
+
     if (infos->is_symlink) {
-      ft_putstr("l");
-      ft_putstr((infos->lstats.st_mode & S_IRUSR) ? "r" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IWUSR) ? "w" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IEXEC) ? "x" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IRGRP) ? "r" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IWGRP) ? "w" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IXGRP) ? "x" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IROTH) ? "r" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IWOTH) ? "w" : "-");
-      ft_putstr((infos->lstats.st_mode & S_IXOTH) ? "x" : "-");
-
-      ft_putchar(' ');
-
-      print_number_spaces(infos->lstats.st_nlink,
-                          values->link_size_column -
-                              ft_number_len(infos->lstats.st_nlink));
-
-      ft_putchar(' ');
-
-      if (args->options.owner) {
-        print_spaces(infos->owner,
-                     values->owner_column - ft_strlen(infos->owner));
-
-        ft_putchar(' ');
-      }
-
-      if (args->options.group) {
-        print_spaces(infos->group,
-                     values->group_column - ft_strlen(infos->group));
-
-        ft_putchar(' ');
-      }
-
-      print_number_spaces(infos->lstats.st_size,
-                          values->size_column -
-                              ft_number_len(infos->lstats.st_size));
-
-      ft_putchar(' ');
-
-      char *time = ctime(&infos->lstats.st_mtim.tv_sec);
-      char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1,
-                            ft_last_index_of(time, ':') - 1);
-      if (tmp != NULL) {
-        ft_putstr(tmp);
-        free(tmp);
-      }
-
-      ft_putchar(' ');
-      if (values->quote_space && ft_strchr(infos->name, ' ') == NULL)
-        ft_putchar(' ');
-
-      print_dir_name(args, infos->name, 0, true, false, false);
-      ft_putstr(" -> ");
+      out = ft_strjoin(out, ft_strdup(" -> "));
+      /* ft_putstr(" -> "); */
 
       char l_name[1000];
       ssize_t size = readlink(infos->name, l_name, sizeof(l_name) - 1);
@@ -822,72 +948,16 @@ void list_detail_printing(Args *args, ColumnValues *values, List *list,
         return;
       }
 
-      ft_putendl(l_name);
-    } else {
-      if (infos->is_directory)
-        ft_putstr("d");
-      else
-        ft_putstr("-");
-
-      ft_putstr((infos->stats.st_mode & S_IRUSR) ? "r" : "-");
-      ft_putstr((infos->stats.st_mode & S_IWUSR) ? "w" : "-");
-      ft_putstr((infos->stats.st_mode & S_IEXEC) ? "x" : "-");
-      ft_putstr((infos->stats.st_mode & S_IRGRP) ? "r" : "-");
-      ft_putstr((infos->stats.st_mode & S_IWGRP) ? "w" : "-");
-      ft_putstr((infos->stats.st_mode & S_IXGRP) ? "x" : "-");
-      ft_putstr((infos->stats.st_mode & S_IROTH) ? "r" : "-");
-      ft_putstr((infos->stats.st_mode & S_IWOTH) ? "w" : "-");
-      ft_putstr((infos->stats.st_mode & S_IXOTH) ? "x" : "-");
-
-      ft_putchar(' ');
-
-      print_number_spaces(infos->stats.st_nlink,
-                          values->link_size_column -
-                              ft_number_len(infos->stats.st_nlink));
-
-      ft_putchar(' ');
-
-      if (args->options.owner) {
-        print_spaces(infos->owner,
-                     values->owner_column - ft_strlen(infos->owner));
-
-        ft_putchar(' ');
-      }
-
-      if (args->options.group) {
-        print_spaces(infos->group,
-                     values->group_column - ft_strlen(infos->group));
-
-        ft_putchar(' ');
-      }
-
-      print_number_spaces(infos->stats.st_size,
-                          values->size_column -
-                              ft_number_len(infos->stats.st_size));
-
-      ft_putchar(' ');
-
-      char *time = ctime(&infos->lstats.st_mtim.tv_sec);
-      char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1,
-                            ft_last_index_of(time, ':') - 1);
-      if (tmp != NULL) {
-        ft_putstr(tmp);
-        free(tmp);
-      }
-
-      ft_putchar(' ');
-      if (values->quote_space && ft_strchr(infos->name, ' ') == NULL)
-        ft_putchar(' ');
-
-      int is_executable = infos->stats.st_mode & S_IEXEC |
-                          infos->stats.st_mode & S_IXGRP |
-                          infos->stats.st_mode & S_IXOTH;
-
-      print_dir_name(args, infos->name, 0, false, infos->is_directory,
-                     is_executable);
-      ft_putchar('\n');
+      out = ft_strjoin(out, ft_strdup(l_name));
+      /* ft_putstr(l_name); */
     }
 
+    out = ft_strjoin(out, ft_strdup("\n"));
+    /* ft_putchar('\n'); */
+
+    ft_putstr(out);
+
+    free(out);
     free(infos->owner);
     free(infos->group);
 
@@ -895,8 +965,69 @@ void list_detail_printing(Args *args, ColumnValues *values, List *list,
   }
 }
 
+Info *get_info(ColumnValues *values, char *name, char *parent_dir) {
+  Info *info = malloc(sizeof(Info));
+
+  char *tmp = ft_strjoin(ft_strdup(parent_dir), ft_strdup("/"));
+  char *path = ft_strjoin(tmp, ft_strdup(name));
+
+  if (lstat(path, &info->lstats) == -1) {
+    free(path);
+    perror("lstat");
+
+    return NULL;
+  }
+
+  free(path);
+
+  info->is_symlink = false;
+  info->is_directory = false;
+
+  if (S_ISLNK(info->lstats.st_mode))
+    info->is_symlink = true;
+  else if (S_ISDIR(info->lstats.st_mode))
+    info->is_directory = true;
+  else if (S_ISREG(info->lstats.st_mode))
+    info->is_directory = false;
+
+  values->block_size += info->lstats.st_blocks;
+
+  info->owner = ft_strdup(getpwuid(info->lstats.st_uid)->pw_name);
+  info->group = ft_strdup(getgrgid(info->lstats.st_gid)->gr_name);
+
+  size_t owner_len = ft_strlen(info->owner);
+
+  if (owner_len > values->owner_column)
+    values->owner_column = owner_len;
+
+  size_t group_len = ft_strlen(info->group);
+
+  if (group_len > values->group_column)
+    values->group_column = group_len;
+
+  size_t len = ft_number_len(info->lstats.st_nlink);
+
+  if (len > values->link_size_column)
+    values->link_size_column = len;
+
+  size_t size_len = ft_number_len(info->lstats.st_size);
+
+  if (size_len > values->size_column)
+    values->size_column = size_len;
+
+  info->name = name;
+
+  if (ft_strchr(name, ' ') != NULL)
+    values->quote_space = 1;
+
+  return info;
+}
+
 void calc_list_values(Args *args, ColumnValues *values, List *list,
                       size_t list_size, char *parent_dir, bool is_files) {
+  if (!values)
+    return;
+
   while (list != NULL) {
     char *name = list->data;
 
@@ -908,87 +1039,7 @@ void calc_list_values(Args *args, ColumnValues *values, List *list,
       }
     }
 
-    Info *info = malloc(sizeof(Info));
-
-    char *tmp = ft_strjoin(parent_dir, "/");
-    char *path = ft_strjoin(tmp, name);
-
-    if (stat(path, &info->stats) == -1) {
-      perror("stat");
-
-      return;
-    }
-
-    if (lstat(path, &info->lstats) == -1) {
-      perror("lstat");
-
-      return;
-    }
-
-    if (S_ISLNK(info->lstats.st_mode)) {
-      info->is_symlink = true;
-
-      info->owner = ft_strdup(getpwuid(info->lstats.st_uid)->pw_name);
-      info->group = ft_strdup(getgrgid(info->lstats.st_gid)->gr_name);
-
-      size_t owner_len = ft_strlen(info->owner);
-
-      if (owner_len > values->owner_column)
-        values->owner_column = owner_len;
-
-      size_t group_len = ft_strlen(info->group);
-
-      if (group_len > values->group_column)
-        values->group_column = group_len;
-
-      size_t len = ft_number_len(info->lstats.st_nlink);
-
-      if (len > values->link_size_column)
-        values->link_size_column = len;
-
-      size_t size_len = ft_number_len(info->lstats.st_size);
-
-      if (size_len > values->size_column)
-        values->size_column = size_len;
-    } else {
-      values->block_size += info->stats.st_blocks;
-      info->is_symlink = false;
-      if (S_ISDIR(info->stats.st_mode)) {
-        info->is_directory = true;
-      } else if (S_ISREG(info->stats.st_mode)) {
-        info->is_directory = false;
-      }
-
-      info->owner = ft_strdup(getpwuid(info->stats.st_uid)->pw_name);
-      info->group = ft_strdup(getgrgid(info->stats.st_gid)->gr_name);
-
-      size_t owner_len = ft_strlen(info->owner);
-
-      if (owner_len > values->owner_column)
-        values->owner_column = owner_len;
-
-      size_t group_len = ft_strlen(info->group);
-
-      if (group_len > values->group_column)
-        values->group_column = group_len;
-
-      size_t len = ft_number_len(info->stats.st_nlink);
-
-      if (len > values->link_size_column)
-        values->link_size_column = len;
-
-      size_t size_len = ft_number_len(info->stats.st_size);
-
-      if (size_len > values->size_column)
-        values->size_column = size_len;
-    }
-
-    info->name = name;
-
-    if (ft_strchr(name, ' ') != NULL)
-      values->quote_space = 1;
-
-    ft_list_push_back(&values->info, info);
+    ft_list_push_back(&values->info, get_info(values, name, parent_dir));
 
     list = list->next;
   }
@@ -1000,7 +1051,7 @@ void list_printing(Args *args, ColumnValues *values, List *list,
 
   calc_list_values(args, values, list, list_size, parent_dir, is_files);
 
-  list_detail_printing(args, values, list, list_size, is_files);
+  list_detail_printing(args, values, is_files);
 }
 
 void print_dir_content(Args *args, char *dirname, int depth) {
@@ -1026,29 +1077,48 @@ void print_dir_content(Args *args, char *dirname, int depth) {
     ft_putendl(":");
   }
 
+  init_columns_values(&values);
+
   while ((dir = readdir(open_dir))) {
     if (!args->options.hidden && dir->d_name[0] == '.')
       continue;
 
-    if (args->options.sort_by_time)
-      sorted_list_insert_by_time(&content, dirname, ft_strdup(dir->d_name),
-                                 &time_cmp);
-    else if (args->options.sort)
-      ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
-    else
-      ft_list_push_back(&content, ft_strdup(dir->d_name));
+    if (args->options.listing) {
+      Info *info = get_info(&values, ft_strdup(dir->d_name), dirname);
+
+      if (args->options.sort_by_time)
+        sorted_list_insert_by_time(&values.info, dirname, info, &info_time_cmp);
+      else if (args->options.sort)
+        ft_sorted_list_insert(&values.info, info, &info_str_cmp);
+      else
+        ft_list_push_back(&values.info, info);
+    } else {
+      if (args->options.sort_by_time)
+        sorted_list_insert_by_time(&content, dirname, ft_strdup(dir->d_name),
+                                   &time_cmp);
+      else if (args->options.sort)
+        ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
+      else
+        ft_list_push_back(&content, ft_strdup(dir->d_name));
+    }
 
     length++;
   }
 
   closedir(open_dir);
 
-  if (args->options.reverse)
-    ft_list_reverse(&content);
+  if (args->options.reverse) {
+    if (values.info != NULL)
+      ft_list_reverse(&values.info);
+    else
+      ft_list_reverse(&content);
+  }
 
-  if (args->options.listing)
-    list_printing(args, &values, content, length, dirname, false);
-  else {
+  if (args->options.listing) {
+    list_detail_printing(args, &values, false);
+
+    clear_values(&values);
+  } else {
     char **list = ft_list_to_strs(content, length);
 
     column_printing(args, &values, list, length, dirname);
@@ -1059,31 +1129,60 @@ void print_dir_content(Args *args, char *dirname, int depth) {
   List *head = content;
 
   if (args->options.recursive) {
-    while (content != NULL) {
-      if (ft_strcmp(content->data, ".") == 0 ||
-          ft_strcmp(content->data, "..") == 0) {
-        content = content->next;
+    if (args->options.listing && values.info) {
+      List *infos = values.info;
 
-        continue;
-      }
+      while (infos != NULL) {
+        Info *info = infos->data;
 
-      char *tmp = ft_strjoin(dirname, "/");
-      char *name = ft_strjoin(tmp, content->data);
+        if (ft_strcmp(info->name, ".") == 0 ||
+            ft_strcmp(info->name, "..") == 0) {
+          infos = infos->next;
 
-      free(tmp);
+          continue;
+        }
 
-      if (check_ressource_type(name) != _DIR) {
+        char *tmp = ft_strjoin(dirname, ft_strdup("/"));
+        char *name = ft_strjoin(tmp, ft_strdup(info->name));
+
+        if (check_ressource_type(name) != _DIR) {
+          free(name);
+          infos = infos->next;
+
+          continue;
+        }
+
+        print_dir_content(args, name, depth);
+
         free(name);
-        content = content->next;
 
-        continue;
+        infos = infos->next;
       }
+    } else {
+      while (content != NULL) {
+        if (ft_strcmp(content->data, ".") == 0 ||
+            ft_strcmp(content->data, "..") == 0) {
+          content = content->next;
 
-      print_dir_content(args, name, depth);
+          continue;
+        }
 
-      free(name);
+        char *tmp = ft_strjoin(dirname, ft_strdup("/"));
+        char *name = ft_strjoin(tmp, ft_strdup(content->data));
 
-      content = content->next;
+        if (check_ressource_type(name) != _DIR) {
+          free(name);
+          content = content->next;
+
+          continue;
+        }
+
+        print_dir_content(args, name, depth);
+
+        free(name);
+
+        content = content->next;
+      }
     }
   }
 
@@ -1092,14 +1191,16 @@ void print_dir_content(Args *args, char *dirname, int depth) {
 
 void process_inputs(Args *args, char *parent_dir, bool is_files) {
   if (is_files) {
+    ColumnValues values;
+
     if (args->options.listing)
-      list_printing(args, &args->files.values, args->files.list,
-                    args->files.size, parent_dir, true);
+
+      list_printing(args, &values, args->files.list, args->files.size,
+                    parent_dir, true);
     else {
       char **list = ft_list_to_strs(args->files.list, args->files.size);
 
-      column_printing(args, &args->files.values, list, args->files.size,
-                      parent_dir);
+      column_printing(args, &values, list, args->files.size, parent_dir);
 
       list_free((void **)list);
     }
