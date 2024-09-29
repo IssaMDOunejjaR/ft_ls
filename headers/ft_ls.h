@@ -47,6 +47,16 @@ typedef struct {
 } Options;
 
 typedef struct {
+  bool is_directory;
+  bool is_symlink;
+  struct stat stats;
+  struct stat lstats;
+  char *owner;
+  char *group;
+  char *name;
+} Info;
+
+typedef struct {
   unsigned long terminal_width;
   short quote_space;
   short gap;
@@ -64,7 +74,6 @@ typedef struct {
 typedef struct {
   List *list;
   size_t size;
-  ColumnValues values;
 } Params;
 
 typedef struct {
