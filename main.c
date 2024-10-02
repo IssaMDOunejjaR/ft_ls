@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 RessourceType check_ressource_type(char *path) {
   struct stat lstats;
@@ -763,10 +764,33 @@ void column_printing(Args *args, ColumnValues *values, char **list,
 }
 
 char *get_permission(bool condition, char *value) {
-  return condition ? ft_strdup(value) : ft_strdup("-");
+  return condition ? value : "-";
 }
 
-void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
+void output_buffering(char *arr, size_t *pos, size_t capacity, char *str) {
+  size_t len = ft_strlen(str);
+
+  while (len > 0) {
+    size_t space_left = capacity - *pos - 1;
+
+    if (len > space_left) {
+      strncpy(arr + *pos, str, space_left);
+      *pos += space_left;
+      arr[*pos] = '\0';
+      write(1, arr, *pos);
+      *pos = 0;
+      str += space_left;
+      len -= space_left;
+    } else {
+      strcpy(arr + *pos, str);
+      *pos += len;
+      break;
+    }
+  }
+}
+
+void list_detail_printing(Args *args, ColumnValues *values, bool is_files,
+                          char *parent_dir) {
 
   if (!is_files) {
     ft_putstr("total ");
@@ -775,135 +799,112 @@ void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
   }
 
   List *content = values->info;
+  size_t capacity = 50;
+  char out[capacity];
 
   while (content != NULL) {
-    char *out = NULL;
+    size_t pos = 0;
     Info *infos = content->data;
 
     if (infos->is_symlink)
-      out = ft_strjoin(out, ft_strdup("l"));
-    /* ft_putstr("l"); */
+      output_buffering(out, &pos, capacity, "l");
     else if (infos->is_directory)
-      out = ft_strjoin(out, ft_strdup("d"));
-    /* ft_putstr("d"); */
+      output_buffering(out, &pos, capacity, "d");
     else
-      out = ft_strjoin(out, ft_strdup("-"));
-    /* ft_putstr("-"); */
+      output_buffering(out, &pos, capacity, "-");
 
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IRUSR, "r"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWUSR, "w"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IEXEC, "x"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IRUSR, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IWUSR, "w"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IEXEC, "x"));
 
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IRGRP, "r"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWGRP, "w"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IXGRP, "x"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IRGRP, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IWGRP, "w"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IXGRP, "x"));
 
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IROTH, "r"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IWOTH, "w"));
-    out = ft_strjoin(out, get_permission(infos->lstats.st_mode & S_IXOTH, "x"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IROTH, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IWOTH, "w"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(infos->lstats.st_mode & S_IXOTH, "x"));
 
-    /* ft_putstr((infos->lstats.st_mode & S_IRUSR) ? "r" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IWUSR) ? "w" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IEXEC) ? "x" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IRGRP) ? "r" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IWGRP) ? "w" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IXGRP) ? "x" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IROTH) ? "r" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IWOTH) ? "w" : "-"); */
-    /* ft_putstr((infos->lstats.st_mode & S_IXOTH) ? "x" : "-"); */
-
-    out = ft_strjoin(out, ft_strdup(" "));
-    /* ft_putchar(' '); */
+    output_buffering(out, &pos, capacity, " ");
 
     size_t size =
         values->link_size_column - ft_long_len(infos->lstats.st_nlink);
 
     while (size > 0) {
-      out = ft_strjoin(out, ft_strdup(" "));
-      /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
 
       size--;
     }
 
-    char *number = ft_itoa(infos->lstats.st_nlink);
-    out = ft_strjoin(out, number);
+    char *number = ft_unsigned_num_to_str(infos->lstats.st_nlink);
+    output_buffering(out, &pos, capacity, number);
+    free(number);
 
-    /* print_number_spaces(infos->lstats.st_nlink, values->link_size_column -
-     * ft_number_len(infos->lstats.st_nlink)); */
-
-    out = ft_strjoin(out, ft_strdup(" "));
-    /* ft_putchar(' '); */
+    output_buffering(out, &pos, capacity, " ");
 
     if (args->options.owner) {
-      out = ft_strjoin(out, ft_strdup(infos->owner));
+      output_buffering(out, &pos, capacity, infos->owner);
 
       size = values->owner_column - ft_strlen(infos->owner);
 
       while (size > 0) {
-        out = ft_strjoin(out, ft_strdup(" "));
-        /* ft_putchar(' '); */
+        output_buffering(out, &pos, capacity, " ");
 
         size--;
       }
-      /* print_spaces(infos->owner, */
-      /*              values->owner_column - ft_strlen(infos->owner)); */
 
-      out = ft_strjoin(out, ft_strdup(" "));
-      /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
     }
 
     if (args->options.group) {
-      out = ft_strjoin(out, ft_strdup(infos->group));
+      output_buffering(out, &pos, capacity, infos->group);
 
       size = values->group_column - ft_strlen(infos->group);
 
       while (size > 0) {
-        out = ft_strjoin(out, ft_strdup(" "));
-        /* ft_putchar(' '); */
+        output_buffering(out, &pos, capacity, " ");
 
         size--;
       }
-      /* print_spaces(infos->group, */
-      /*              values->group_column - ft_strlen(infos->group)); */
 
-      out = ft_strjoin(out, ft_strdup(" "));
-      /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
     }
 
     size = values->size_column - ft_number_len(infos->lstats.st_size);
 
     while (size > 0) {
-      out = ft_strjoin(out, ft_strdup(" "));
-      /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
 
       size--;
     }
 
-    number = ft_itoa(infos->lstats.st_size);
-    out = ft_strjoin(out, number);
+    number = ft_signed_num_to_str(infos->lstats.st_size);
+    output_buffering(out, &pos, capacity, number);
+    free(number);
 
-    /* print_number_spaces(infos->lstats.st_size, */
-    /*                     values->size_column - */
-    /*                         ft_number_len(infos->lstats.st_size)); */
-
-    out = ft_strjoin(out, ft_strdup(" "));
-    /* ft_putchar(' '); */
+    output_buffering(out, &pos, capacity, " ");
 
     char *time = ctime(&infos->lstats.st_mtim.tv_sec);
     char *tmp = ft_substr(time, ft_index_of_char(time, ' ') + 1,
                           ft_last_index_of(time, ':') - 1);
     if (tmp != NULL) {
-      out = ft_strjoin(out, tmp);
-      /* ft_putstr(tmp); */
-      /* free(tmp); */
+      output_buffering(out, &pos, capacity, tmp);
+      free(tmp);
     }
 
-    out = ft_strjoin(out, ft_strdup(" "));
-    /* ft_putchar(' '); */
+    output_buffering(out, &pos, capacity, " ");
 
     if (values->quote_space && ft_strchr(infos->name, ' ') == NULL)
-      out = ft_strjoin(out, ft_strdup(" "));
-    /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
 
     char *colors[] = {FILE_COLOR, DIRECTORY_COLOR, SYMLINK_COLOR, EXECUTABLE};
 
@@ -917,30 +918,29 @@ void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
                           : (infos->is_directory ? 1 : (is_executable ? 3 : 0))
                     : 0;
 
-    out = ft_strjoin(out, ft_strdup(colors[index]));
-    /* ft_putstr(colors[index]); */
+    output_buffering(out, &pos, capacity, colors[index]);
 
-    out = ft_strjoin(out, ft_strdup(infos->name));
-    /* print_dir(dirname); */
+    output_buffering(out, &pos, capacity, infos->name);
 
-    out = ft_strjoin(out, ft_strdup(WHITE));
-    /* ft_putstr(WHITE); */
+    output_buffering(out, &pos, capacity, WHITE);
 
     while (size > 0) {
-      out = ft_strjoin(out, ft_strdup(" "));
-      /* ft_putchar(' '); */
+      output_buffering(out, &pos, capacity, " ");
 
       size--;
     }
-    /* print_dir_name(args, infos->name, 0, true, false, false); */
 
     if (infos->is_symlink) {
-      out = ft_strjoin(out, ft_strdup(" -> "));
-      /* ft_putstr(" -> "); */
+      output_buffering(out, &pos, capacity, " -> ");
+
+      char *tmp = ft_strjoin(parent_dir, "/");
+      char *name = ft_strjoin(tmp, infos->name);
+      free(tmp);
 
       char l_name[1000];
-      ssize_t size = readlink(infos->name, l_name, sizeof(l_name) - 1);
-      l_name[size] = '\0';
+      ssize_t size = readlink(name, l_name, sizeof(l_name) - 1);
+
+      free(name);
 
       if (size == -1) {
         perror("readlink");
@@ -948,16 +948,17 @@ void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
         return;
       }
 
-      out = ft_strjoin(out, ft_strdup(l_name));
-      /* ft_putstr(l_name); */
+      l_name[size] = '\0';
+
+      output_buffering(out, &pos, capacity, l_name);
     }
 
-    out = ft_strjoin(out, ft_strdup("\n"));
-    /* ft_putchar('\n'); */
+    output_buffering(out, &pos, capacity, "\n");
+
+    out[pos] = '\0';
 
     ft_putstr(out);
 
-    free(out);
     free(infos->owner);
     free(infos->group);
 
@@ -968,8 +969,9 @@ void list_detail_printing(Args *args, ColumnValues *values, bool is_files) {
 Info *get_info(ColumnValues *values, char *name, char *parent_dir) {
   Info *info = malloc(sizeof(Info));
 
-  char *tmp = ft_strjoin(ft_strdup(parent_dir), ft_strdup("/"));
-  char *path = ft_strjoin(tmp, ft_strdup(name));
+  char *tmp = ft_strjoin(parent_dir, "/");
+  char *path = ft_strjoin(tmp, name);
+  free(tmp);
 
   if (lstat(path, &info->lstats) == -1) {
     free(path);
@@ -1051,15 +1053,150 @@ void list_printing(Args *args, ColumnValues *values, List *list,
 
   calc_list_values(args, values, list, list_size, parent_dir, is_files);
 
-  list_detail_printing(args, values, is_files);
+  list_detail_printing(args, values, is_files, parent_dir);
 }
+
+/* void print_dir_content(Args *args, char *dirname, int depth) { */
+/*   DIR *open_dir = opendir(dirname); */
+/**/
+/*   if (!open_dir) { */
+/*     perror("opendir"); */
+/**/
+/*     return; */
+/*   } */
+/**/
+/*   List *content = NULL; */
+/*   size_t length = 0; */
+/*   struct dirent *dir = NULL; */
+/*   ColumnValues values; */
+/**/
+/*   if (args->options.recursive) { */
+/*     if (depth > 0) */
+/*       ft_putchar('\n'); */
+/**/
+/*     depth++; */
+/*     print_dir(dirname); */
+/*     ft_putendl(":"); */
+/*   } */
+/**/
+/*   init_columns_values(&values); */
+/**/
+/*   while ((dir = readdir(open_dir))) { */
+/*     if (!args->options.hidden && dir->d_name[0] == '.') */
+/*       continue; */
+/**/
+/*     if (args->options.listing) { */
+/*       Info *info = get_info(&values, dir->d_name, dirname); */
+/**/
+/*       if (args->options.sort_by_time) */
+/*         sorted_list_insert_by_time(&values.info, dirname, info,
+ * &info_time_cmp); */
+/*       else if (args->options.sort) */
+/*         ft_sorted_list_insert(&values.info, info, &info_str_cmp); */
+/*       else */
+/*         ft_list_push_back(&values.info, info); */
+/*     } else { */
+/*       if (args->options.sort_by_time) */
+/*         sorted_list_insert_by_time(&content, dirname, ft_strdup(dir->d_name),
+ */
+/*                                    &time_cmp); */
+/*       else if (args->options.sort) */
+/*         ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp); */
+/*       else */
+/*         ft_list_push_back(&content, ft_strdup(dir->d_name)); */
+/*     } */
+/**/
+/*     length++; */
+/*   } */
+/**/
+/*   closedir(open_dir); */
+/**/
+/*   if (args->options.reverse) { */
+/*     if (values.info != NULL) */
+/*       ft_list_reverse(&values.info); */
+/*     else */
+/*       ft_list_reverse(&content); */
+/*   } */
+/**/
+/*   if (args->options.listing) { */
+/*     list_detail_printing(args, &values, false, dirname); */
+/**/
+/*     clear_values(&values); */
+/*   } else { */
+/*     char **list = ft_list_to_strs(content, length); */
+/**/
+/*     column_printing(args, &values, list, length, dirname); */
+/**/
+/*     table_free(list); */
+/*   } */
+/**/
+/*   List *head = content; */
+/**/
+/*   if (args->options.recursive) { */
+/*     if (args->options.listing && values.info) { */
+/*       List *infos = values.info; */
+/**/
+/*       while (infos != NULL) { */
+/*         Info *info = infos->data; */
+/**/
+/*         if (ft_strcmp(info->name, ".") == 0 || */
+/*             ft_strcmp(info->name, "..") == 0) { */
+/*           infos = infos->next; */
+/**/
+/*           continue; */
+/*         } */
+/**/
+/*         char *tmp = ft_strjoin(dirname, ft_strdup("/")); */
+/*         char *name = ft_strjoin(tmp, ft_strdup(info->name)); */
+/**/
+/*         if (check_ressource_type(name) != _DIR) { */
+/*           free(name); */
+/*           infos = infos->next; */
+/**/
+/*           continue; */
+/*         } */
+/**/
+/*         print_dir_content(args, name, depth); */
+/**/
+/*         free(name); */
+/**/
+/*         infos = infos->next; */
+/*       } */
+/*     } else { */
+/*       while (content != NULL) { */
+/*         if (ft_strcmp(content->data, ".") == 0 || */
+/*             ft_strcmp(content->data, "..") == 0) { */
+/*           content = content->next; */
+/**/
+/*           continue; */
+/*         } */
+/**/
+/*         char *tmp = ft_strjoin(dirname, ft_strdup("/")); */
+/*         char *name = ft_strjoin(tmp, ft_strdup(content->data)); */
+/**/
+/*         if (check_ressource_type(name) != _DIR) { */
+/*           free(name); */
+/*           content = content->next; */
+/**/
+/*           continue; */
+/*         } */
+/**/
+/*         print_dir_content(args, name, depth); */
+/**/
+/*         free(name); */
+/**/
+/*         content = content->next; */
+/*       } */
+/*     } */
+/*   } */
+/**/
+/*   ft_list_clear(head, &free); */
+/* } */
 
 void print_dir_content(Args *args, char *dirname, int depth) {
   DIR *open_dir = opendir(dirname);
-
   if (!open_dir) {
     perror("opendir");
-
     return;
   }
 
@@ -1071,7 +1208,6 @@ void print_dir_content(Args *args, char *dirname, int depth) {
   if (args->options.recursive) {
     if (depth > 0)
       ft_putchar('\n');
-
     depth++;
     print_dir(dirname);
     ft_putendl(":");
@@ -1079,34 +1215,50 @@ void print_dir_content(Args *args, char *dirname, int depth) {
 
   init_columns_values(&values);
 
+  // Preallocate buffer for constructing full paths to avoid repetitive
+  // allocations
+  size_t dirname_len = strlen(dirname);
+  size_t path_buffer_size =
+      dirname_len + 256; // assuming max filename length of 255
+  char *path_buffer = malloc(path_buffer_size);
+  if (!path_buffer) {
+    closedir(open_dir);
+    perror("malloc");
+    return;
+  }
+  strcpy(path_buffer, dirname);
+  strcat(path_buffer, "/");
+
+  // Collect all entries first
   while ((dir = readdir(open_dir))) {
+    // Skip hidden files if the option is disabled
     if (!args->options.hidden && dir->d_name[0] == '.')
       continue;
 
+    // Build the full path once, reusing path_buffer
+    strcpy(path_buffer + dirname_len + 1, dir->d_name);
+
     if (args->options.listing) {
       Info *info = get_info(&values, ft_strdup(dir->d_name), dirname);
-
-      if (args->options.sort_by_time)
-        sorted_list_insert_by_time(&values.info, dirname, info, &info_time_cmp);
-      else if (args->options.sort)
-        ft_sorted_list_insert(&values.info, info, &info_str_cmp);
-      else
-        ft_list_push_back(&values.info, info);
+      ft_list_push_back(&values.info, info);
     } else {
-      if (args->options.sort_by_time)
-        sorted_list_insert_by_time(&content, dirname, ft_strdup(dir->d_name),
-                                   &time_cmp);
-      else if (args->options.sort)
-        ft_sorted_list_insert(&content, ft_strdup(dir->d_name), &str_cmp);
-      else
-        ft_list_push_back(&content, ft_strdup(dir->d_name));
+      ft_list_push_back(&content, ft_strdup(dir->d_name));
     }
-
     length++;
   }
-
   closedir(open_dir);
 
+  // Perform sorting after collecting entries
+  if (args->options.sort_by_time) {
+    ft_list_sort(&values.info, &info_time_cmp);
+    ft_list_sort(&content, &time_cmp);
+  } else if (args->options.sort) {
+    ft_list_sort(&values.info, &info_str_cmp);
+    ft_list_sort(&content, &str_cmp);
+  }
+  printf("sort\n");
+
+  // Reverse if the option is enabled
   if (args->options.reverse) {
     if (values.info != NULL)
       ft_list_reverse(&values.info);
@@ -1114,79 +1266,47 @@ void print_dir_content(Args *args, char *dirname, int depth) {
       ft_list_reverse(&content);
   }
 
+  // Output directory listing
   if (args->options.listing) {
-    list_detail_printing(args, &values, false);
-
+    list_detail_printing(args, &values, false, dirname);
     clear_values(&values);
   } else {
     char **list = ft_list_to_strs(content, length);
-
     column_printing(args, &values, list, length, dirname);
-
     table_free(list);
   }
 
-  List *head = content;
-
+  // Recursive traversal
   if (args->options.recursive) {
     if (args->options.listing && values.info) {
       List *infos = values.info;
-
       while (infos != NULL) {
         Info *info = infos->data;
-
-        if (ft_strcmp(info->name, ".") == 0 ||
-            ft_strcmp(info->name, "..") == 0) {
-          infos = infos->next;
-
-          continue;
+        if (ft_strcmp(info->name, ".") != 0 &&
+            ft_strcmp(info->name, "..") != 0) {
+          strcpy(path_buffer + dirname_len + 1, info->name);
+          if (check_ressource_type(path_buffer) == _DIR) {
+            print_dir_content(args, path_buffer, depth);
+          }
         }
-
-        char *tmp = ft_strjoin(dirname, ft_strdup("/"));
-        char *name = ft_strjoin(tmp, ft_strdup(info->name));
-
-        if (check_ressource_type(name) != _DIR) {
-          free(name);
-          infos = infos->next;
-
-          continue;
-        }
-
-        print_dir_content(args, name, depth);
-
-        free(name);
-
         infos = infos->next;
       }
     } else {
       while (content != NULL) {
-        if (ft_strcmp(content->data, ".") == 0 ||
-            ft_strcmp(content->data, "..") == 0) {
-          content = content->next;
-
-          continue;
+        if (ft_strcmp(content->data, ".") != 0 &&
+            ft_strcmp(content->data, "..") != 0) {
+          strcpy(path_buffer + dirname_len + 1, content->data);
+          if (check_ressource_type(path_buffer) == _DIR) {
+            print_dir_content(args, path_buffer, depth);
+          }
         }
-
-        char *tmp = ft_strjoin(dirname, ft_strdup("/"));
-        char *name = ft_strjoin(tmp, ft_strdup(content->data));
-
-        if (check_ressource_type(name) != _DIR) {
-          free(name);
-          content = content->next;
-
-          continue;
-        }
-
-        print_dir_content(args, name, depth);
-
-        free(name);
-
         content = content->next;
       }
     }
   }
 
-  ft_list_clear(head, &free);
+  ft_list_clear(content, &free);
+  free(path_buffer);
 }
 
 void process_inputs(Args *args, char *parent_dir, bool is_files) {
