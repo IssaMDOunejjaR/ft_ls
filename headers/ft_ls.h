@@ -82,11 +82,4 @@ typedef struct {
   Options options;
 } Args;
 
-void print_dir(char *dirname);
-void print_dir_name(Args *args, char *dirname, int size, bool is_symlink,
-                    bool is_directory, bool is_executable);
-size_t *arraycpy(size_t *arr, size_t size);
-bool string_cmp(void *a, void *b);
-void pretty_print(Args *args, char *dirname);
-
 #endif
