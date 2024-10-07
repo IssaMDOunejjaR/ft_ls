@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 
 #define MIN_COLUMN_WIDTH 3
@@ -76,8 +77,10 @@ typedef struct {
 // Informations about a file
 typedef struct {
   char *name;
-  char *linkname;
   char *fullname;
+
+  char *owner_name;
+  char *group_name;
 
   struct stat *stat;
 
@@ -89,6 +92,21 @@ typedef struct {
   size_t size;
   ColumnInfo column_info;
 } Input;
+
+typedef struct OwnerCache {
+  uid_t uid;
+  char *owner_name;
+  struct OwnerCache *next;
+} OwnerCache;
+
+typedef struct GroupCache {
+  gid_t gid;
+  char *group_name;
+  struct GroupCache *next;
+} GroupCache;
+
+OwnerCache *owner_cache = NULL;
+GroupCache *group_cache = NULL;
 
 enum SortType sort_type = sort_name;
 enum Format format = many_per_line;
@@ -163,6 +181,9 @@ void print_file_name(char *name, enum Filetype file_type) {
 }
 
 void init_inputs(void) {
+  all.list = NULL;
+  files.size = 0;
+
   files.list = NULL;
   files.size = 0;
 
@@ -172,16 +193,28 @@ void init_inputs(void) {
 
 void clear_file_info(FileInfo *file_info) {
   free(file_info->name);
-  free(file_info->linkname);
   free(file_info->fullname);
-  /* free(file_info->stat); */
+  free(file_info->stat);
 
   free(file_info);
 }
 
 void clear_inputs(void) {
-  ft_list_clear(files.list, (ClearFunc)&clear_file_info);
-  ft_list_clear(dirs.list, (ClearFunc)&clear_file_info);
+  ft_list_clear(all.list, (ClearFunc)&clear_file_info);
+
+  while (group_cache != NULL) {
+    free(group_cache->group_name);
+    GroupCache *tmp = group_cache;
+    group_cache = group_cache->next;
+    free(group_cache);
+  }
+
+  while (owner_cache != NULL) {
+    free(owner_cache->owner_name);
+    OwnerCache *tmp = owner_cache;
+    owner_cache = owner_cache->next;
+    free(owner_cache);
+  }
 }
 
 void clear_column_info(ColumnInfo *column_info) {
@@ -396,7 +429,6 @@ FileInfo *create_file_info(char *name, struct stat *stat) {
 
   info->name = name;
   info->fullname = NULL;
-  info->linkname = NULL;
   info->stat = stat;
 
   if (!S_ISDIR(stat->st_mode) && !S_ISLNK(stat->st_mode) &&
@@ -418,7 +450,7 @@ int parse_args(int argc, char **argv) {
     if (ft_strcmp(argv[i], "--help") == 0) {
       print_help();
 
-      return 0;
+      return 1;
     } else if (argv[i][0] == '-') {
       int ret = 0;
 
@@ -638,6 +670,90 @@ void out_column_format(Input input, FileInfo **list) {
   }
 }
 
+char *get_owner_name(uid_t uid) {
+  OwnerCache *current = owner_cache;
+
+  while (current != NULL) {
+    if (current->uid == uid)
+      return current->owner_name;
+    current = current->next;
+  }
+
+  struct passwd *owner = getpwuid(uid);
+  if (!owner)
+    return NULL;
+
+  OwnerCache *new_cache = malloc(sizeof(OwnerCache));
+  new_cache->uid = uid;
+  new_cache->owner_name = ft_strdup(owner->pw_name);
+  new_cache->next = owner_cache;
+  owner_cache = new_cache;
+
+  return new_cache->owner_name;
+}
+
+char *get_group_name(gid_t gid) {
+  GroupCache *current = group_cache;
+
+  while (current != NULL) {
+    if (current->gid == gid)
+      return current->group_name;
+    current = current->next;
+  }
+
+  struct group *grp = getgrgid(gid);
+
+  if (!grp)
+    return NULL;
+
+  GroupCache *new_cache = malloc(sizeof(GroupCache));
+  new_cache->gid = gid;
+  new_cache->group_name = ft_strdup(grp->gr_name);
+  new_cache->next = group_cache;
+  group_cache = new_cache;
+
+  return new_cache->group_name;
+}
+
+void update_column_info(FileInfo *info, ColumnInfo *column_info) {
+  if (print_owner) {
+    char *owner = get_owner_name(info->stat->st_uid);
+
+    if (owner) {
+      info->owner_name = owner;
+      size_t owner_len = ft_strlen(owner);
+
+      if (owner_len > column_info->owner_width)
+        column_info->owner_width = owner_len;
+    }
+  }
+
+  if (print_group) {
+    char *group_name = get_group_name(info->stat->st_gid);
+
+    if (group_name) {
+      info->group_name = group_name;
+      size_t group_len = ft_strlen(group_name);
+
+      if (group_len > column_info->group_width)
+        column_info->group_width = group_len;
+    }
+  }
+
+  size_t len = ft_unsigned_number_len(info->stat->st_nlink);
+
+  if (len > column_info->nlink_width)
+    column_info->nlink_width = len;
+
+  size_t size_len = ft_signed_number_len(info->stat->st_size);
+
+  if (size_len > column_info->size_width)
+    column_info->size_width = size_len;
+
+  if (!column_info && ft_strchr(info->name, ' ') != NULL)
+    column_info->print_quote = true;
+}
+
 void calc_long_format(Input *input) {
   init_column_info(&input->column_info);
 
@@ -734,10 +850,9 @@ void out_long_format(Input input) {
     output_buffering(out, &pos, capacity, " ");
 
     if (print_owner) {
-      char *owner = (getpwuid(file_info->stat->st_uid))->pw_name;
-      output_buffering(out, &pos, capacity, owner);
+      output_buffering(out, &pos, capacity, file_info->owner_name);
 
-      size = column_info.owner_width - ft_strlen(owner);
+      size = column_info.owner_width - ft_strlen(file_info->owner_name);
 
       while (size > 0) {
         output_buffering(out, &pos, capacity, " ");
@@ -749,10 +864,9 @@ void out_long_format(Input input) {
     }
 
     if (print_group) {
-      char *group = (getgrgid(file_info->stat->st_gid))->gr_name;
-      output_buffering(out, &pos, capacity, group);
+      output_buffering(out, &pos, capacity, file_info->group_name);
 
-      size = column_info.group_width - ft_strlen(group);
+      size = column_info.group_width - ft_strlen(file_info->group_name);
 
       while (size > 0) {
         output_buffering(out, &pos, capacity, " ");
@@ -879,9 +993,9 @@ void separate_input(void) {
 void list_print(void *data) {
   FileInfo *info = data;
 
-  printf("'%s' -> { fullname: %s, linkname: %s, size: %ld, last_update: %lu, "
+  printf("'%s' -> { fullname: %s, size: %ld, last_update: %lu, "
          "type: %s }\n",
-         info->name, info->fullname, info->linkname, info->stat->st_size,
+         info->name, info->fullname, info->stat->st_size,
          info->stat->st_mtim.tv_sec,
          info->filetype == normal || info->filetype == symbolic_link ? "FILE"
                                                                      : "DIR");
@@ -908,29 +1022,16 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
 
     bool print_quote = ft_strchr(name, ' ') != NULL;
 
-    if (print_quote) {
+    if (print_quote)
       ft_putchar(1, '\'');
-      ft_putstr(1, name);
+    ft_putstr(1, name);
+    if (print_quote)
       ft_putchar(1, '\'');
-    } else
-      ft_putstr(1, name);
-
     ft_putstr(1, ":\n");
   }
 
   size_t name_len = ft_strlen(name);
-  size_t path_buffer_size = name_len + 256;
-  char *full_path = malloc(path_buffer_size);
-
-  if (!full_path) {
-    closedir(o_dir);
-    perror("malloc");
-
-    return;
-  }
-
-  ft_strcpy(full_path, name);
-  full_path[name_len] = '/';
+  char full_path[name_len + 256];
 
   struct dirent *content;
   Input input;
@@ -946,52 +1047,22 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
     if (ignore_hidden_files && content->d_name[0] == '.')
       continue;
 
+    ft_strcpy(full_path, name);
+    full_path[name_len] = '/';
     ft_strcpy(full_path + name_len + 1, content->d_name);
 
-    /* struct stat *stat = malloc(sizeof(struct stat)); */
-    struct stat stat;
+    struct stat *stat = malloc(sizeof(struct stat));
 
-    if (lstat(full_path, &stat) == -1) {
+    if (lstat(full_path, stat) == -1) {
       perror("lstat");
       continue;
     }
 
-    FileInfo *info = create_file_info(ft_strdup(content->d_name), &stat);
-
+    FileInfo *info = create_file_info(ft_strdup(content->d_name), stat);
     info->fullname = ft_strdup(full_path);
+    update_column_info(info, column_info);
 
-    if (print_owner) {
-      char *owner = (getpwuid(info->stat->st_uid))->pw_name;
-
-      size_t owner_len = ft_strlen(owner);
-
-      if (owner_len > column_info->owner_width)
-        column_info->owner_width = owner_len;
-    }
-
-    if (print_group) {
-      char *group = (getgrgid(info->stat->st_gid))->gr_name;
-
-      size_t group_len = ft_strlen(group);
-
-      if (group_len > column_info->group_width)
-        column_info->group_width = group_len;
-    }
-
-    size_t len = ft_unsigned_number_len(info->stat->st_nlink);
-
-    if (len > column_info->nlink_width)
-      column_info->nlink_width = len;
-
-    size_t size_len = ft_signed_number_len(info->stat->st_size);
-
-    if (size_len > column_info->size_width)
-      column_info->size_width = size_len;
-
-    if (ft_strchr(info->name, ' ') != NULL)
-      column_info->print_quote = true;
-
-    ft_list_push_back(&input.list, info);
+    ft_list_push_front(&input.list, info);
     input.size++;
   }
 
@@ -999,8 +1070,7 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
     ft_list_sort(&input.list, NULL);
   else if (sort_type == sort_name)
     ft_list_sort(&input.list, (ComparFun)&file_info_cmp_by_name);
-
-  if (sort_reverse)
+  else if (!sort_reverse)
     ft_list_reverse(&input.list);
 
   if (format == long_format)
@@ -1037,7 +1107,6 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
     }
   }
 
-  free(full_path);
   ft_list_clear(input.list, (ClearFunc)&clear_file_info);
   closedir(o_dir);
 }
