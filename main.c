@@ -45,9 +45,7 @@ static bool immediate_dirs;
 static bool ignore_hidden_files = true;
 static bool ignore_dots;
 static bool print_quotes = true;
-
-static bool format_needs_stat;
-static bool format_needs_type;
+/* static bool print_access_time = true; */
 
 enum Filetype { directory, normal, symbolic_link, executable };
 
@@ -250,19 +248,21 @@ void clear_file_info(FileInfo *file_info) {
 
 void clear_inputs(void) {
   ft_list_clear(all.list, (ClearFunc)&clear_file_info);
+  ft_list_clear(files.list, (ClearFunc)&clear_file_info);
+  ft_list_clear(dirs.list, (ClearFunc)&clear_file_info);
 
   while (group_cache != NULL) {
     free(group_cache->group_name);
     GroupCache *tmp = group_cache;
     group_cache = group_cache->next;
-    free(group_cache);
+    free(tmp);
   }
 
   while (owner_cache != NULL) {
     free(owner_cache->owner_name);
     OwnerCache *tmp = owner_cache;
     owner_cache = owner_cache->next;
-    free(owner_cache);
+    free(tmp);
   }
 }
 
@@ -280,7 +280,7 @@ void print_help() {
 
   int start_pad = 2;
   int middle_gap = 5;
-  int left_pad = 0;
+  size_t left_pad = 0;
 
   for (int i = 0; VALID_OPTIONS[i][0] != NULL; i++) {
     size_t len =
@@ -310,7 +310,8 @@ void print_help() {
                         ft_strlen(VALID_OPTIONS[i][1]) +
                         (VALID_OPTIONS[i][0] && VALID_OPTIONS[i][1] ? 2 : 0);
 
-    for (int j = 0; j < (left_pad - option_len - start_pad) + middle_gap; j++)
+    for (size_t j = 0; j < (left_pad - option_len - start_pad) + middle_gap;
+         j++)
       ft_putchar(1, ' ');
 
     int max_paragraph_len = 70, count = 0;
@@ -323,7 +324,7 @@ void print_help() {
         count = 0;
         ft_putchar(1, '\n');
 
-        for (int k = 0; k < left_pad + middle_gap; k++)
+        for (size_t k = 0; k < left_pad + middle_gap; k++)
           ft_putchar(1, ' ');
       }
     }
@@ -498,8 +499,8 @@ FileInfo *create_file_info(char *name, struct stat *stat) {
   info->stat = stat;
 
   if (!S_ISDIR(stat->st_mode) && !S_ISLNK(stat->st_mode) &&
-      (stat->st_mode & S_IEXEC | stat->st_mode & S_IXGRP |
-       stat->st_mode & S_IXOTH))
+      ((stat->st_mode & S_IEXEC) | (stat->st_mode & S_IXGRP) |
+       (stat->st_mode & S_IXOTH)))
     info->filetype = executable;
   else if (S_ISLNK(stat->st_mode))
     info->filetype = symbolic_link;
@@ -738,9 +739,9 @@ void print_dir_name(FileInfo *file_info, int size) {
 void out_column_format(Input *input, FileInfo **list) {
   ColumnInfo column_info = input->column_info;
 
-  for (int row = 0; row < column_info.num_rows; row++) {
-    for (int col = 0; col < column_info.num_columns; col++) {
-      int index = row + col * column_info.num_rows;
+  for (size_t row = 0; row < column_info.num_rows; row++) {
+    for (size_t col = 0; col < column_info.num_columns; col++) {
+      size_t index = row + col * column_info.num_rows;
 
       if (index < input->size) {
         FileInfo *file_info = list[index];
@@ -750,7 +751,7 @@ void out_column_format(Input *input, FileInfo **list) {
           ft_putchar(1, ' ');
 
         int spaces = 0;
-        int next_word = row + (col + 1) * column_info.num_rows;
+        size_t next_word = row + (col + 1) * column_info.num_rows;
 
         if (col < column_info.num_columns - 1) {
           spaces = column_info.col_widths[col] - ft_strlen(file_info->name) +
@@ -1046,9 +1047,9 @@ void print_out_format(Input input) {
 
 void separate_input(void) {
   List *list = all.list;
-  List *tmp = NULL;
 
   while (list != NULL) {
+    List *tmp = list;
     FileInfo *file_info = list->data;
 
     if (file_info->filetype == normal || file_info->filetype == symbolic_link ||
@@ -1060,10 +1061,11 @@ void separate_input(void) {
       dirs.size++;
     }
 
-    /* tmp = list; */
     list = list->next;
-    /* free(tmp); */
+    free(tmp);
   }
+
+  all.list = NULL;
 }
 
 void list_print(void *data) {
@@ -1077,8 +1079,7 @@ void list_print(void *data) {
                                                                      : "DIR");
 }
 
-void process_dir_content(FileInfo *file_info, char *parent_dir_name,
-                         int depth) {
+void process_dir_content(FileInfo *file_info, int depth) {
   char *name = file_info
                    ? file_info->fullname ? file_info->fullname : file_info->name
                    : ".";
@@ -1186,7 +1187,7 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
       }
 
       if (file_info->filetype == directory)
-        process_dir_content(list->data, file_info->fullname, depth);
+        process_dir_content(list->data, depth);
 
       list = list->next;
     }
@@ -1202,7 +1203,7 @@ void process_inputs(void) {
   else if (immediate_dirs)
     print_out_format(all);
   else if (all.size == 0)
-    process_dir_content(NULL, ".", 0);
+    process_dir_content(NULL, 0);
   else {
     separate_input();
 
@@ -1224,7 +1225,7 @@ void process_inputs(void) {
           ft_putstr(1, ":\n");
         }
 
-        process_dir_content(info, info->name, 0);
+        process_dir_content(info, 0);
 
         if (dirs.size > 1 && list->next != NULL)
           ft_putchar(1, '\n');
@@ -1232,7 +1233,7 @@ void process_inputs(void) {
         list = list->next;
       }
     } else if (files.size == 0) {
-      process_dir_content(NULL, ".", 0);
+      process_dir_content(NULL, 0);
     }
   }
 }
