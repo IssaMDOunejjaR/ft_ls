@@ -54,7 +54,7 @@ static char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
 
 static char filetype_letter[] = "d-l-";
 
-enum SortType { sort_none = -1, sort_name, sort_time };
+enum SortType { sort_none = -1, sort_name, sort_time, sort_size };
 
 enum Format { long_format, one_per_line, many_per_line, with_commas };
 
@@ -426,6 +426,8 @@ char set_option(char c, char *opt) {
     sort_reverse = true;
   } else if (c == 'R') {
     recursive = true;
+  } else if (c == 'S') {
+    sort_type = sort_size;
   } else if (c == 't') {
     sort_type = sort_time;
   } else if (c == 'u') {
@@ -550,6 +552,17 @@ char *skip_dots(char *str) {
   return &str[i];
 }
 
+int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
+  long ret = b->stat->st_size - a->stat->st_size;
+
+  if (ret < 0)
+    return -1;
+  else if (ret > 0)
+    return 1;
+
+  return 0;
+}
+
 int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
   long long s1_time_ns =
       (a->stat->st_mtim.tv_sec * 1000000000) + a->stat->st_mtim.tv_nsec;
@@ -589,6 +602,8 @@ void sort_inputs(void) {
     ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_time);
   else if (sort_type == sort_name)
     ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_name);
+  else if (sort_type == sort_size)
+    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_size);
 
   if (sort_reverse)
     ft_list_reverse(&all.list);
@@ -1121,6 +1136,8 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
     ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_time);
   else if (sort_type == sort_name)
     ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_name);
+  else if (sort_type == sort_size)
+    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_size);
 
   if (sort_reverse)
     ft_list_reverse(&input.list);
