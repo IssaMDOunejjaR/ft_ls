@@ -266,7 +266,7 @@ void clear_column_info(ColumnInfo *column_info) {
 }
 
 void print_help() {
-  ft_putstr(1, "Usage:");
+  ft_putstr(1, "Usage: ");
   ft_putstr(1, program_name);
   ft_putstr(1,
             " [OPTION]... [FILE]...\nList information about the "
@@ -832,13 +832,12 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   if (size_len > column_info->size_width)
     column_info->size_width = size_len;
 
-  if (!column_info->print_quote) {
-    if (ft_strchr(info->name, ' ') != NULL) {
+  if (ft_strchr(info->name, ' ') != NULL) {
+    if (!column_info->print_quote)
       column_info->print_quote = true;
-      info->print_quote = true;
-    } else
-      info->print_quote = false;
-  }
+    info->print_quote = true;
+  } else
+    info->print_quote = false;
 }
 
 void calc_long_format(Input *input) {
@@ -966,25 +965,19 @@ void out_long_format(Input *input) {
     if (column_info.print_quote && !file_info->print_quote)
       output_buffering(out, &pos, capacity, " ");
 
-    if (print_with_color) {
+    if (print_with_color)
       output_buffering(out, &pos, capacity,
                        filetype_color[file_info->filetype]);
-      if (file_info->print_quote) {
-        output_buffering(out, &pos, capacity, "'");
-        output_buffering(out, &pos, capacity, file_info->name);
-        output_buffering(out, &pos, capacity, "'");
-      } else
-        output_buffering(out, &pos, capacity, file_info->name);
 
+    if (file_info->print_quote) {
+      output_buffering(out, &pos, capacity, "'");
+      output_buffering(out, &pos, capacity, file_info->name);
+      output_buffering(out, &pos, capacity, "'");
+    } else
+      output_buffering(out, &pos, capacity, file_info->name);
+
+    if (print_with_color)
       output_buffering(out, &pos, capacity, WHITE);
-    } else {
-      if (file_info->print_quote) {
-        output_buffering(out, &pos, capacity, "'");
-        output_buffering(out, &pos, capacity, file_info->name);
-        output_buffering(out, &pos, capacity, "'");
-      } else
-        output_buffering(out, &pos, capacity, file_info->name);
-    }
 
     while (size > 0) {
       output_buffering(out, &pos, capacity, " ");
@@ -1105,9 +1098,7 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
   input.list = NULL;
   input.size = 0;
 
-  ColumnInfo *column_info = &input.column_info;
-
-  init_column_info(column_info);
+  init_column_info(&input.column_info);
 
   while ((content = readdir(o_dir))) {
     if (ignore_hidden_files && content->d_name[0] == '.')
@@ -1126,7 +1117,7 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
 
     FileInfo *info = create_file_info(ft_strdup(content->d_name), stat);
     info->fullname = ft_strdup(full_path);
-    update_column_info(info, column_info);
+    update_column_info(info, &input.column_info);
 
     ft_list_push_back(&input.list, info);
     input.size++;
