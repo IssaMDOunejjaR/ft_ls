@@ -1,9 +1,6 @@
 EXEC			= ft_ls
 
 LIB_PATH	= ./libcft
-# LIB_NAME	= lib.a
-# LIB_SRCS	= $(filter-out ./lib/test.c, $(wildcard ./lib/*.c))
-# LIB_OBJS	= $(LIB_SRCS:.c=.o)
 	
 SRCS			= $(wildcard ./utils/*.c)
 OBJS			= $(SRCS:.c=.o)

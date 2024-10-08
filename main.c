@@ -18,9 +18,9 @@
 #define MIN_COLUMN_WIDTH 3
 
 #define WHITE "\033[0;37m"
-#define CYAN "\033[0;36m"
-#define BLUE "\033[0;34m"
-#define GREEN "\033[0;32m"
+#define CYAN "\033[1;36m"
+#define BLUE "\033[1;34m"
+#define GREEN "\033[1;32m"
 
 #define FILE_COLOR WHITE
 #define DIRECTORY_COLOR BLUE
@@ -28,10 +28,12 @@
 #define EXECUTABLE_COLOR GREEN
 
 typedef void (*ClearFunc)(void *);
-typedef int (*ComparFun)(void *, void *);
-typedef void (*FormatFun)(void *, void *);
+typedef int (*CompareFunc)(void *, void *);
+typedef void (*FormatFunc)(void *, void *);
 
 static int exit_status;
+
+char *program_name;
 
 // Options
 static bool sort_reverse;
@@ -59,6 +61,7 @@ enum Format { long_format, one_per_line, many_per_line, with_commas };
 // Information about filling a column
 typedef struct {
   bool print_quote;
+  bool print_acl;
 
   // long_format info
   size_t nlink_width;
@@ -79,6 +82,8 @@ typedef struct {
   char *name;
   char *fullname;
 
+  bool print_quote;
+
   char *owner_name;
   char *group_name;
 
@@ -91,6 +96,7 @@ typedef struct {
   List *list;
   size_t size;
   ColumnInfo column_info;
+  bool error;
 } Input;
 
 typedef struct OwnerCache {
@@ -166,7 +172,7 @@ void output_buffering(char *arr, size_t *pos, size_t capacity, char *str) {
   }
 }
 
-void print_file_name(char *name, enum Filetype file_type) {
+void print_file_name(FileInfo *file_info, enum Filetype file_type) {
   size_t capacity = 20;
   char out[capacity];
   size_t pos = 0;
@@ -174,21 +180,59 @@ void print_file_name(char *name, enum Filetype file_type) {
   if (print_with_color)
     output_buffering(out, &pos, capacity, filetype_color[file_type]);
 
-  output_buffering(out, &pos, capacity, name);
+  if (file_info->print_quote)
+    output_buffering(out, &pos, capacity, "'");
+  output_buffering(out, &pos, capacity, file_info->name);
+  if (file_info->print_quote)
+    output_buffering(out, &pos, capacity, "'");
   output_buffering(out, &pos, capacity, WHITE);
 
   ft_putstr(1, out);
 }
 
+size_t get_terminal_width(void) {
+  struct winsize w;
+
+  if (ioctl(0, TIOCGWINSZ, &w) == -1) {
+    perror("ioctl");
+
+    return 0;
+  }
+
+  return w.ws_col;
+}
+
+void init_column_info(ColumnInfo *column_info) {
+  column_info->print_quote = false;
+  column_info->print_acl = false;
+
+  column_info->group_width = 0;
+  column_info->owner_width = 0;
+  column_info->nlink_width = 0;
+  column_info->size_width = 0;
+
+  column_info->term_width = get_terminal_width();
+  column_info->num_columns = 0;
+  column_info->num_rows = 0;
+  column_info->gap = 2;
+  column_info->col_widths = NULL;
+}
+
 void init_inputs(void) {
   all.list = NULL;
-  files.size = 0;
+  all.size = 0;
+  all.error = false;
+  init_column_info(&all.column_info);
 
   files.list = NULL;
   files.size = 0;
+  files.error = false;
+  init_column_info(&files.column_info);
 
   dirs.list = NULL;
   dirs.size = 0;
+  dirs.error = false;
+  init_column_info(&dirs.column_info);
 }
 
 void clear_file_info(FileInfo *file_info) {
@@ -222,8 +266,10 @@ void clear_column_info(ColumnInfo *column_info) {
 }
 
 void print_help() {
+  ft_putstr(1, "Usage:");
+  ft_putstr(1, program_name);
   ft_putstr(1,
-            "Usage: ft_ls [OPTION]... [FILE]...\nList information about the "
+            " [OPTION]... [FILE]...\nList information about the "
             "FILEs (the current directory by default).\n\nMandatory arguments "
             "to long options are mandatory for short options too.\n");
 
@@ -471,10 +517,20 @@ int parse_args(int argc, char **argv) {
     } else {
       struct stat *stat = malloc(sizeof(struct stat));
 
-      if (lstat(argv[i], stat) == -1)
+      if (lstat(argv[i], stat) == -1) {
         input_not_found(argv[i]);
-      else {
+        all.error = true;
+      } else {
         FileInfo *info = create_file_info(ft_strdup(argv[i]), stat);
+
+        if (ft_strchr(argv[i], ' ') != NULL) {
+          info->print_quote = true;
+
+          if (!all.column_info.print_quote) {
+            all.column_info.print_quote = true;
+            all.column_info.gap = 3;
+          }
+        }
 
         ft_list_push_back(&all.list, info);
         all.size++;
@@ -485,49 +541,57 @@ int parse_args(int argc, char **argv) {
   return 0;
 }
 
+char *skip_dots(char *str) {
+  int i = 0;
+
+  while (str[i] != '\0' && str[i] == '.')
+    i++;
+
+  return &str[i];
+}
+
+int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
+  long long s1_time_ns =
+      (a->stat->st_mtim.tv_sec * 1000000000) + a->stat->st_mtim.tv_nsec;
+  long long s2_time_ns =
+      (b->stat->st_mtim.tv_sec * 1000000000) + b->stat->st_mtim.tv_nsec;
+  long long result = s1_time_ns - s2_time_ns;
+
+  if (result < 0)
+    return 1;
+  else if (result > 0)
+    return -1;
+
+  return 0;
+}
+
 int file_info_cmp_by_name(FileInfo *a, FileInfo *b) {
   int idx_a = ft_last_index_of(a->name, '/');
   int idx_b = ft_last_index_of(b->name, '/');
 
-  return ft_strcmp_lowercase(idx_a == -1 ? a->name : &a->name[idx_a + 1],
-                             idx_b == -1 ? b->name : &b->name[idx_b + 1]);
+  int ia = idx_a == -1 ? 0 : idx_a + 1;
+  int ib = idx_b == -1 ? 0 : idx_b + 1;
+
+  char *s1 =
+      ft_strcmp(".", &a->name[ia]) == 0 || ft_strcmp("..", &a->name[ia]) == 0
+          ? &a->name[ia]
+          : skip_dots(&a->name[ia]);
+  char *s2 =
+      ft_strcmp(".", &b->name[ib]) == 0 || ft_strcmp("..", &b->name[ib]) == 0
+          ? &b->name[ib]
+          : skip_dots(&b->name[ib]);
+
+  return ft_strcmp_lowercase(s1, s2);
 }
 
 void sort_inputs(void) {
   if (sort_type == sort_time)
-    ft_list_sort(&all.list, NULL);
+    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_time);
   else if (sort_type == sort_name)
-    ft_list_sort(&all.list, (ComparFun)&file_info_cmp_by_name);
+    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_name);
 
   if (sort_reverse)
     ft_list_reverse(&all.list);
-}
-
-size_t get_terminal_width(void) {
-  struct winsize w;
-
-  if (ioctl(0, TIOCGWINSZ, &w) == -1) {
-    perror("ioctl");
-
-    return 0;
-  }
-
-  return w.ws_col;
-}
-
-void init_column_info(ColumnInfo *column_info) {
-  column_info->print_quote = false;
-
-  column_info->group_width = 0;
-  column_info->owner_width = 0;
-  column_info->nlink_width = 0;
-  column_info->size_width = 0;
-
-  column_info->term_width = get_terminal_width();
-  column_info->num_columns = 0;
-  column_info->num_rows = 0;
-  column_info->gap = 2;
-  column_info->col_widths = NULL;
 }
 
 FileInfo **input_list_to_table(Input input) {
@@ -548,8 +612,6 @@ FileInfo **input_list_to_table(Input input) {
 }
 
 void calc_many_per_line_format(Input *input, FileInfo **list) {
-  init_column_info(&input->column_info);
-
   size_t num_columns = 1, num_rows = input->size;
   size_t *col_widths = NULL, *tmp = NULL;
 
@@ -571,7 +633,7 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
 
     col_widths = malloc(sizeof(size_t) * num_columns);
 
-    size_t total_width = 0;
+    size_t total_width = input->column_info.print_quote ? 1 : 0;
 
     for (size_t col = 0; col < num_columns; col++) {
       size_t max_len = 0;
@@ -582,8 +644,13 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
         if (index < input->size) {
           size_t len = ft_strlen(list[index]->name);
 
-          if (ft_strchr(list[index]->name, ' ') != NULL)
+          if (ft_strchr(list[index]->name, ' ') != NULL) {
+            input->column_info.print_quote = true;
+            input->column_info.gap = 3;
+            list[index]->print_quote = true;
             len++;
+          } else
+            list[index]->print_quote = false;
 
           if (len > max_len) {
             max_len = len;
@@ -624,7 +691,7 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
 }
 
 void print_dir_name(FileInfo *file_info, int size) {
-  print_file_name(file_info->name, file_info->filetype);
+  print_file_name(file_info, file_info->filetype);
 
   while (size > 0) {
     ft_putchar(1, ' ');
@@ -633,33 +700,33 @@ void print_dir_name(FileInfo *file_info, int size) {
   }
 }
 
-void out_column_format(Input input, FileInfo **list) {
-  for (int row = 0; row < input.column_info.num_rows; row++) {
-    for (int col = 0; col < input.column_info.num_columns; col++) {
-      int index = row + col * input.column_info.num_rows;
+void out_column_format(Input *input, FileInfo **list) {
+  ColumnInfo column_info = input->column_info;
 
-      if (index < input.size) {
+  for (int row = 0; row < column_info.num_rows; row++) {
+    for (int col = 0; col < column_info.num_columns; col++) {
+      int index = row + col * column_info.num_rows;
+
+      if (index < input->size) {
         FileInfo *file_info = list[index];
 
-        char *is_spaced_name = strchr(file_info->name, ' ');
-
-        if (col == 0 && is_spaced_name == NULL)
+        if (col == 0 && column_info.print_quote && !file_info->print_quote)
           ft_putchar(1, ' ');
 
         int spaces = 0;
-        int next_word = row + (col + 1) * input.column_info.num_rows;
+        int next_word = row + (col + 1) * column_info.num_rows;
 
-        if (col < input.column_info.num_columns - 1) {
-          spaces = input.column_info.col_widths[col] - strlen(file_info->name) +
-                   input.column_info.gap;
+        if (col < column_info.num_columns - 1) {
+          spaces = column_info.col_widths[col] - ft_strlen(file_info->name) +
+                   column_info.gap;
 
-          if (next_word < input.size &&
-              strchr(list[next_word]->name, ' ') != NULL) {
+          if (next_word < input->size &&
+              ft_strchr(list[next_word]->name, ' ') != NULL) {
             spaces--;
           }
         }
 
-        if (is_spaced_name != NULL)
+        if (file_info->print_quote)
           spaces--;
 
         print_dir_name(file_info, spaces);
@@ -750,44 +817,23 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   if (size_len > column_info->size_width)
     column_info->size_width = size_len;
 
-  if (!column_info && ft_strchr(info->name, ' ') != NULL)
-    column_info->print_quote = true;
+  if (!column_info->print_quote) {
+    if (ft_strchr(info->name, ' ') != NULL) {
+      column_info->print_quote = true;
+      info->print_quote = true;
+    } else
+      info->print_quote = false;
+  }
 }
 
 void calc_long_format(Input *input) {
-  init_column_info(&input->column_info);
-
   List *list = input->list;
   ColumnInfo *column_info = &input->column_info;
 
   while (list != NULL) {
     FileInfo *file_info = list->data;
 
-    char *owner = (getpwuid(file_info->stat->st_uid))->pw_name;
-    char *group = (getgrgid(file_info->stat->st_gid))->gr_name;
-
-    size_t owner_len = ft_strlen(owner);
-
-    if (owner_len > column_info->owner_width)
-      column_info->owner_width = owner_len;
-
-    size_t group_len = ft_strlen(group);
-
-    if (group_len > column_info->group_width)
-      column_info->group_width = group_len;
-
-    size_t len = ft_unsigned_number_len(file_info->stat->st_nlink);
-
-    if (len > column_info->nlink_width)
-      column_info->nlink_width = len;
-
-    size_t size_len = ft_signed_number_len(file_info->stat->st_size);
-
-    if (size_len > column_info->size_width)
-      column_info->size_width = size_len;
-
-    if (ft_strchr(file_info->name, ' ') != NULL)
-      column_info->print_quote = true;
+    update_column_info(file_info, column_info);
 
     list = list->next;
   }
@@ -797,9 +843,9 @@ char *get_permission(bool condition, char *value) {
   return condition ? value : "-";
 }
 
-void out_long_format(Input input) {
-  List *list = input.list;
-  ColumnInfo column_info = input.column_info;
+void out_long_format(Input *input) {
+  List *list = input->list;
+  ColumnInfo column_info = input->column_info;
   size_t capacity = 256;
   char out[capacity];
 
@@ -902,15 +948,13 @@ void out_long_format(Input input) {
 
     output_buffering(out, &pos, capacity, " ");
 
-    bool print_quote = ft_strchr(file_info->name, ' ') != NULL;
-
-    if (column_info.print_quote && !print_quote)
+    if (column_info.print_quote && !file_info->print_quote)
       output_buffering(out, &pos, capacity, " ");
 
     if (print_with_color) {
       output_buffering(out, &pos, capacity,
                        filetype_color[file_info->filetype]);
-      if (print_quote) {
+      if (file_info->print_quote) {
         output_buffering(out, &pos, capacity, "'");
         output_buffering(out, &pos, capacity, file_info->name);
         output_buffering(out, &pos, capacity, "'");
@@ -919,7 +963,7 @@ void out_long_format(Input input) {
 
       output_buffering(out, &pos, capacity, WHITE);
     } else {
-      if (print_quote) {
+      if (file_info->print_quote) {
         output_buffering(out, &pos, capacity, "'");
         output_buffering(out, &pos, capacity, file_info->name);
         output_buffering(out, &pos, capacity, "'");
@@ -959,12 +1003,12 @@ void out_long_format(Input input) {
 void print_out_format(Input input) {
   if (format == long_format) {
     calc_long_format(&input);
-    out_long_format(input);
+    out_long_format(&input);
   } else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
 
     calc_many_per_line_format(&input, list);
-    out_column_format(input, list);
+    out_column_format(&input, list);
 
     clear_column_info(&input.column_info);
     free(list);
@@ -973,6 +1017,7 @@ void print_out_format(Input input) {
 
 void separate_input(void) {
   List *list = all.list;
+  List *tmp = NULL;
 
   while (list != NULL) {
     FileInfo *file_info = list->data;
@@ -986,7 +1031,9 @@ void separate_input(void) {
       dirs.size++;
     }
 
+    /* tmp = list; */
     list = list->next;
+    /* free(tmp); */
   }
 }
 
@@ -1010,7 +1057,11 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
   DIR *o_dir = opendir(name);
 
   if (!o_dir) {
-    perror("opendir");
+    ft_putstr(2, program_name);
+    ft_putstr(2, ": cannot open directory '");
+    ft_putstr(2, name);
+    ft_putstr(2, "': ");
+    perror("");
 
     return;
   }
@@ -1062,24 +1113,25 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
     info->fullname = ft_strdup(full_path);
     update_column_info(info, column_info);
 
-    ft_list_push_front(&input.list, info);
+    ft_list_push_back(&input.list, info);
     input.size++;
   }
 
   if (sort_type == sort_time)
-    ft_list_sort(&input.list, NULL);
+    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_time);
   else if (sort_type == sort_name)
-    ft_list_sort(&input.list, (ComparFun)&file_info_cmp_by_name);
-  else if (!sort_reverse)
+    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_name);
+
+  if (sort_reverse)
     ft_list_reverse(&input.list);
 
   if (format == long_format)
-    out_long_format(input);
+    out_long_format(&input);
   else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
 
     calc_many_per_line_format(&input, list);
-    out_column_format(input, list);
+    out_column_format(&input, list);
 
     clear_column_info(&input.column_info);
     free(list);
@@ -1112,13 +1164,21 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
 }
 
 void process_inputs(void) {
-  if (immediate_dirs)
+  if (all.size == 0 && all.error)
+    exit_status = 2;
+  else if (immediate_dirs)
     print_out_format(all);
+  else if (all.size == 0)
+    process_dir_content(NULL, ".", 0);
   else {
     separate_input();
 
-    if (files.size > 0)
+    if (files.size > 0) {
       print_out_format(files);
+
+      if (dirs.size > 0 || all.error)
+        ft_putchar(1, '\n');
+    }
 
     if (dirs.size > 0) {
       List *list = dirs.list;
@@ -1126,11 +1186,19 @@ void process_inputs(void) {
       while (list != NULL) {
         FileInfo *info = list->data;
 
+        if (dirs.size > 1 || files.size > 0) {
+          ft_putstr(1, info->name);
+          ft_putstr(1, ":\n");
+        }
+
         process_dir_content(info, info->name, 0);
+
+        if (dirs.size > 1 && list->next != NULL)
+          ft_putchar(1, '\n');
 
         list = list->next;
       }
-    } else {
+    } else if (files.size == 0) {
       process_dir_content(NULL, ".", 0);
     }
   }
@@ -1138,6 +1206,8 @@ void process_inputs(void) {
 
 int main(int argc, char *argv[]) {
   init_inputs();
+
+  program_name = argv[0];
 
   if (parse_args(argc, argv) == 0) {
     sort_inputs();
