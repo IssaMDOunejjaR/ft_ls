@@ -43,6 +43,8 @@ static bool print_with_color;
 static bool recursive;
 static bool immediate_dirs;
 static bool ignore_hidden_files = true;
+static bool ignore_dots;
+static bool print_quotes = true;
 
 static bool format_needs_stat;
 static bool format_needs_type;
@@ -180,11 +182,14 @@ void print_file_name(FileInfo *file_info, enum Filetype file_type) {
   if (print_with_color)
     output_buffering(out, &pos, capacity, filetype_color[file_type]);
 
-  if (file_info->print_quote)
+  if (print_quotes && file_info->print_quote)
     output_buffering(out, &pos, capacity, "'");
+
   output_buffering(out, &pos, capacity, file_info->name);
-  if (file_info->print_quote)
+
+  if (print_quotes && file_info->print_quote)
     output_buffering(out, &pos, capacity, "'");
+
   output_buffering(out, &pos, capacity, WHITE);
 
   ft_putstr(1, out);
@@ -403,12 +408,20 @@ char set_option(char c, char *opt) {
   if (opt != NULL) {
     if (ft_strcmp(opt, "--color") == 0) {
       print_with_color = true;
+    } else if (ft_strcmp(opt, "--literal") == 0) {
+      print_quotes = false;
+    } else if (ft_strcmp(opt, "--almost_all") == 0) {
+      ignore_hidden_files = false;
+      ignore_dots = true;
     } else
       return 0;
 
     return 1;
   } else if (c == 'a') {
     ignore_hidden_files = false;
+  } else if (c == 'A') {
+    ignore_hidden_files = false;
+    ignore_dots = true;
   } else if (c == 'd') {
     immediate_dirs = true;
   } else if (c == 'f') {
@@ -421,6 +434,11 @@ char set_option(char c, char *opt) {
     print_owner = false;
     format = long_format;
   } else if (c == 'l') {
+    format = long_format;
+  } else if (c == 'N') {
+    print_quotes = false;
+  } else if (c == 'o') {
+    print_group = false;
     format = long_format;
   } else if (c == 'r') {
     sort_reverse = true;
@@ -659,13 +677,15 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
         if (index < input->size) {
           size_t len = ft_strlen(list[index]->name);
 
-          if (ft_strchr(list[index]->name, ' ') != NULL) {
-            input->column_info.print_quote = true;
-            input->column_info.gap = 3;
-            list[index]->print_quote = true;
-            len++;
-          } else
-            list[index]->print_quote = false;
+          if (print_quotes) {
+            if (ft_strchr(list[index]->name, ' ') != NULL) {
+              input->column_info.print_quote = true;
+              input->column_info.gap = 3;
+              list[index]->print_quote = true;
+              len++;
+            } else
+              list[index]->print_quote = false;
+          }
 
           if (len > max_len) {
             max_len = len;
@@ -725,7 +745,8 @@ void out_column_format(Input *input, FileInfo **list) {
       if (index < input->size) {
         FileInfo *file_info = list[index];
 
-        if (col == 0 && column_info.print_quote && !file_info->print_quote)
+        if (col == 0 && print_quotes && column_info.print_quote &&
+            !file_info->print_quote)
           ft_putchar(1, ' ');
 
         int spaces = 0;
@@ -735,13 +756,13 @@ void out_column_format(Input *input, FileInfo **list) {
           spaces = column_info.col_widths[col] - ft_strlen(file_info->name) +
                    column_info.gap;
 
-          if (next_word < input->size &&
+          if (print_quotes && next_word < input->size &&
               ft_strchr(list[next_word]->name, ' ') != NULL) {
             spaces--;
           }
         }
 
-        if (file_info->print_quote)
+        if (print_quotes && file_info->print_quote)
           spaces--;
 
         print_dir_name(file_info, spaces);
@@ -962,14 +983,14 @@ void out_long_format(Input *input) {
 
     output_buffering(out, &pos, capacity, " ");
 
-    if (column_info.print_quote && !file_info->print_quote)
+    if (print_quotes && column_info.print_quote && !file_info->print_quote)
       output_buffering(out, &pos, capacity, " ");
 
     if (print_with_color)
       output_buffering(out, &pos, capacity,
                        filetype_color[file_info->filetype]);
 
-    if (file_info->print_quote) {
+    if (print_quotes && file_info->print_quote) {
       output_buffering(out, &pos, capacity, "'");
       output_buffering(out, &pos, capacity, file_info->name);
       output_buffering(out, &pos, capacity, "'");
@@ -1102,6 +1123,10 @@ void process_dir_content(FileInfo *file_info, char *parent_dir_name,
 
   while ((content = readdir(o_dir))) {
     if (ignore_hidden_files && content->d_name[0] == '.')
+      continue;
+
+    if (ignore_dots && (ft_strcmp(".", content->d_name) == 0 ||
+                        ft_strcmp("..", content->d_name) == 0))
       continue;
 
     ft_strcpy(full_path, name);
