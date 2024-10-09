@@ -18,14 +18,19 @@
 #define MIN_COLUMN_WIDTH 3
 
 #define WHITE "\033[0;37m"
+#define BLACK "\033[0;30m"
 #define CYAN "\033[1;36m"
 #define BLUE "\033[1;34m"
 #define GREEN "\033[1;32m"
+
+#define RESET_BACK "\x1b[0m"
+#define GREEN_BACK "\x1b[42m"
 
 #define FILE_COLOR WHITE
 #define DIRECTORY_COLOR BLUE
 #define SYMLINK_COLOR CYAN
 #define EXECUTABLE_COLOR GREEN
+#define STICKY_BIT_COLOR GREEN_BACK
 
 typedef void (*ClearFunc)(void *);
 typedef int (*CompareFunc)(void *, void *);
@@ -47,10 +52,10 @@ static bool ignore_dots;
 static bool print_quotes = true;
 /* static bool print_access_time = true; */
 
-enum Filetype { directory, normal, symbolic_link, executable };
+enum Filetype { directory, normal, symbolic_link, executable, sticky_bit };
 
 static char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
-                                 EXECUTABLE_COLOR};
+                                 EXECUTABLE_COLOR, STICKY_BIT_COLOR};
 
 static char filetype_letter[] = "d-l-";
 
@@ -911,8 +916,13 @@ void out_long_format(Input *input) {
                      get_permission(file_info->stat->st_mode & S_IROTH, "r"));
     output_buffering(out, &pos, capacity,
                      get_permission(file_info->stat->st_mode & S_IWOTH, "w"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
+
+    if ((file_info->stat->st_mode & S_ISVTX))
+      output_buffering(out, &pos, capacity,
+                       get_permission(file_info->stat->st_mode & S_IXOTH, "t"));
+    else
+      output_buffering(out, &pos, capacity,
+                       get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
 
     output_buffering(out, &pos, capacity, " ");
 
@@ -987,9 +997,14 @@ void out_long_format(Input *input) {
     if (print_quotes && column_info.print_quote && !file_info->print_quote)
       output_buffering(out, &pos, capacity, " ");
 
-    if (print_with_color)
-      output_buffering(out, &pos, capacity,
-                       filetype_color[file_info->filetype]);
+    if (print_with_color) {
+      if ((file_info->stat->st_mode & S_ISVTX)) {
+        output_buffering(out, &pos, capacity, BLACK);
+        output_buffering(out, &pos, capacity, STICKY_BIT_COLOR);
+      } else
+        output_buffering(out, &pos, capacity,
+                         filetype_color[file_info->filetype]);
+    }
 
     if (print_quotes && file_info->print_quote) {
       output_buffering(out, &pos, capacity, "'");
@@ -998,8 +1013,12 @@ void out_long_format(Input *input) {
     } else
       output_buffering(out, &pos, capacity, file_info->name);
 
-    if (print_with_color)
+    if (print_with_color) {
+      if ((file_info->stat->st_mode & S_ISVTX))
+        output_buffering(out, &pos, capacity, RESET_BACK);
+
       output_buffering(out, &pos, capacity, WHITE);
+    }
 
     while (size > 0) {
       output_buffering(out, &pos, capacity, " ");
@@ -1011,7 +1030,7 @@ void out_long_format(Input *input) {
       output_buffering(out, &pos, capacity, " -> ");
 
       char l_name[256];
-      ssize_t size = readlink(file_info->name, l_name, sizeof(l_name) - 1);
+      ssize_t size = readlink(file_info->fullname, l_name, sizeof(l_name) - 1);
 
       if (size != -1) {
         l_name[size] = '\0';
@@ -1114,6 +1133,11 @@ void process_dir_content(FileInfo *file_info, int depth) {
   size_t name_len = ft_strlen(name);
   char full_path[name_len + 256];
 
+  ft_strcpy(full_path, name);
+
+  if (full_path[name_len - 1] != '/')
+    full_path[name_len++] = '/';
+
   struct dirent *content;
   Input input;
 
@@ -1130,9 +1154,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
                         ft_strcmp("..", content->d_name) == 0))
       continue;
 
-    ft_strcpy(full_path, name);
-    full_path[name_len] = '/';
-    ft_strcpy(full_path + name_len + 1, content->d_name);
+    ft_strcpy(full_path + name_len, content->d_name);
 
     struct stat *stat = malloc(sizeof(struct stat));
 
@@ -1187,7 +1209,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
       }
 
       if (file_info->filetype == directory)
-        process_dir_content(list->data, depth);
+        process_dir_content(file_info, depth);
 
       list = list->next;
     }
