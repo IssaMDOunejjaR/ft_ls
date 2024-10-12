@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/xattr.h>
 #include <time.h>
 
 #define MIN_COLUMN_WIDTH 3
@@ -88,6 +89,7 @@ typedef struct {
   char *fullname;
 
   bool print_quote;
+  bool print_acl;
 
   char *owner_name;
   char *group_name;
@@ -602,23 +604,52 @@ int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
   return 0;
 }
 
+int ft_is_in_set(char c, char *set) {
+  for (int i = 0; set[i] != '\0'; i++) {
+    if (c == set[i])
+      return 1;
+  }
+
+  return 0;
+}
+
+int ft_strcoll_lowercase(char *s1, char *s2) {
+  char *set = "._";
+  int i = 0, j = 0;
+
+  while (s1[i] != '\0' && s2[j] != '\0') {
+    char a = ft_to_lower(s1[i]);
+    char b = ft_to_lower(s2[j]);
+
+    int is_a_in = ft_is_in_set(a, set);
+    int is_b_in = ft_is_in_set(b, set);
+
+    if (is_a_in || is_b_in) {
+      if (is_a_in)
+        i++;
+
+      if (is_b_in)
+        j++;
+
+      continue;
+    } else if (a != b)
+      return a - b;
+
+    i++;
+    j++;
+  }
+
+  char a = ft_to_lower(s1[i]);
+  char b = ft_to_lower(s2[j]);
+
+  if (a != b)
+    return a - b;
+
+  return 0;
+}
+
 int file_info_cmp_by_name(FileInfo *a, FileInfo *b) {
-  int idx_a = ft_last_index_of(a->name, '/');
-  int idx_b = ft_last_index_of(b->name, '/');
-
-  int ia = idx_a == -1 ? 0 : idx_a + 1;
-  int ib = idx_b == -1 ? 0 : idx_b + 1;
-
-  char *s1 =
-      ft_strcmp(".", &a->name[ia]) == 0 || ft_strcmp("..", &a->name[ia]) == 0
-          ? &a->name[ia]
-          : skip_dots(&a->name[ia]);
-  char *s2 =
-      ft_strcmp(".", &b->name[ib]) == 0 || ft_strcmp("..", &b->name[ib]) == 0
-          ? &b->name[ib]
-          : skip_dots(&b->name[ib]);
-
-  return ft_strcmp_lowercase(s1, s2);
+  return ft_strcoll_lowercase(a->name, b->name);
 }
 
 void sort_inputs(void) {
@@ -771,6 +802,9 @@ void out_column_format(Input *input, FileInfo **list) {
         if (print_quotes && file_info->print_quote)
           spaces--;
 
+        if (next_word > input->size || !list[next_word])
+          spaces = 0;
+
         print_dir_name(file_info, spaces);
       }
     }
@@ -825,6 +859,14 @@ char *get_group_name(gid_t gid) {
 }
 
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
+  ssize_t ret = getxattr(info->name, "system.posix_acl_access", NULL, 0);
+
+  if (ret >= 0) {
+    column_info->print_acl = true;
+    info->print_acl = true;
+  } else
+    info->print_acl = false;
+
   if (print_owner) {
     char *owner = get_owner_name(info->stat->st_uid);
 
@@ -923,6 +965,13 @@ void out_long_format(Input *input) {
     else
       output_buffering(out, &pos, capacity,
                        get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
+
+    if (input->column_info.print_acl) {
+      if (file_info->print_acl)
+        output_buffering(out, &pos, capacity, "+");
+      else
+        output_buffering(out, &pos, capacity, " ");
+    }
 
     output_buffering(out, &pos, capacity, " ");
 
