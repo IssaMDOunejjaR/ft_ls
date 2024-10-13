@@ -3,6 +3,7 @@
 #include "libcft/number/ft_number.h"
 #include "libcft/string/ft_string.h"
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
@@ -41,6 +42,7 @@ typedef void (*FormatFunc)(void *, void *);
 static int exit_status;
 
 char *program_name;
+char *name_set = " $'\"[]()!";
 
 // Options
 static bool sort_reverse;
@@ -92,6 +94,7 @@ typedef struct {
 
   bool print_quote;
   bool print_acl;
+  bool has_single_quote;
 
   char *owner_name;
   char *group_name;
@@ -189,13 +192,21 @@ void print_file_name(FileInfo *file_info, enum Filetype file_type) {
   if (print_with_color)
     output_buffering(out, &pos, capacity, filetype_color[file_type]);
 
-  if (print_quotes && file_info->print_quote)
-    output_buffering(out, &pos, capacity, "'");
+  if (print_quotes && file_info->print_quote) {
+    if (file_info->has_single_quote)
+      output_buffering(out, &pos, capacity, "\"");
+    else
+      output_buffering(out, &pos, capacity, "'");
+  }
 
   output_buffering(out, &pos, capacity, file_info->name);
 
-  if (print_quotes && file_info->print_quote)
-    output_buffering(out, &pos, capacity, "'");
+  if (print_quotes && file_info->print_quote) {
+    if (file_info->has_single_quote)
+      output_buffering(out, &pos, capacity, "\"");
+    else
+      output_buffering(out, &pos, capacity, "'");
+  }
 
   output_buffering(out, &pos, capacity, WHITE);
 
@@ -572,9 +583,15 @@ int parse_args(int argc, char **argv) {
       } else {
         FileInfo *info = create_file_info(ft_strdup(argv[i]), stat);
 
-        if (ft_has_set(argv[i], " $") != NULL) {
-          /* if (ft_strchr(argv[i], ' ') != NULL) { */
+        char *has_set = ft_has_set(argv[i], name_set);
+
+        if (has_set != NULL) {
           info->print_quote = true;
+
+          if (has_set[0] == '\'')
+            info->has_single_quote = true;
+          else
+            info->has_single_quote = false;
 
           if (!all.column_info.print_quote) {
             all.column_info.print_quote = true;
@@ -600,16 +617,57 @@ char *skip_dots(char *str) {
   return &str[i];
 }
 
-int ft_strcoll_lowercase(char *s1, char *s2) {
-  char *set = "._-+, ";
+int ft_is_special_char(char c) {
+  if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+      (c >= '0' && c <= '9'))
+    return 0;
+
+  return 1;
+}
+
+int ft_strcmp_alphanum(char *s1, char *s2) {
+  int i = 0, j = 0;
+
+  while (s1[i] != '\0' && s2[j] != '\0') {
+    char a = s1[i];
+    char b = s2[j];
+
+    int is_a_in = ft_is_special_char(a);
+    int is_b_in = ft_is_special_char(b);
+
+    if (is_a_in || is_b_in) {
+      if (is_a_in)
+        i++;
+
+      if (is_b_in)
+        j++;
+
+      continue;
+    } else if (a != b)
+      return a - b;
+
+    i++;
+    j++;
+  }
+
+  char a = s1[i];
+  char b = s2[j];
+
+  if (a != b)
+    return a - b;
+
+  return 0;
+}
+
+int ft_strcmp_alphanum_case(char *s1, char *s2) {
   int i = 0, j = 0;
 
   while (s1[i] != '\0' && s2[j] != '\0') {
     char a = ft_to_lower(s1[i]);
     char b = ft_to_lower(s2[j]);
 
-    int is_a_in = ft_is_in_set(a, set);
-    int is_b_in = ft_is_in_set(b, set);
+    int is_a_in = ft_is_special_char(a);
+    int is_b_in = ft_is_special_char(b);
 
     if (is_a_in || is_b_in) {
       if (is_a_in)
@@ -631,6 +689,40 @@ int ft_strcoll_lowercase(char *s1, char *s2) {
 
   if (a != b)
     return a - b;
+
+  return 0;
+}
+
+int ft_strcoll_lowercase(char *s1, char *s2) {
+  int ret = ft_strcmp_alphanum_case(s1, s2);
+
+  if (ret != 0)
+    return ret;
+
+  /* size_t s1_len = ft_strlen(s1); */
+  /* size_t s2_len = ft_strlen(s2); */
+  /**/
+  /* if (s1_len < s2_len) */
+  /*   return 1; */
+  /* else if (s1_len > s2_len) */
+  /*   return -1; */
+
+  ret = ft_strcmp_lowercase(s1, s2);
+
+  if (ret != 0)
+    return ret;
+
+  ret = ft_strcmp_alphanum(s1, s2);
+
+  if (ret != 0)
+    return ret;
+
+  ret = ft_strcmp(s1, s2);
+
+  if (ret < 0)
+    return 1;
+  else if (ret > 0)
+    return -1;
 
   return 0;
 }
@@ -727,10 +819,18 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
           size_t len = ft_strlen(list[index]->name);
 
           if (print_quotes) {
-            if (ft_has_set(list[index]->name, " $") != NULL) {
+            char *has_set = ft_has_set(list[index]->name, name_set);
+
+            if (has_set != NULL) {
               input->column_info.print_quote = true;
               input->column_info.gap = 3;
               list[index]->print_quote = true;
+
+              if (has_set[0] == '\'')
+                list[index]->has_single_quote = true;
+              else
+                list[index]->has_single_quote = false;
+
               len++;
             } else
               list[index]->print_quote = false;
@@ -806,7 +906,7 @@ void out_column_format(Input *input, FileInfo **list) {
                    column_info.gap;
 
           if (print_quotes && next_word < input->size &&
-              ft_has_set(list[next_word]->name, " $") != NULL) {
+              ft_has_set(list[next_word]->name, name_set) != NULL) {
             spaces--;
           }
         }
@@ -915,11 +1015,19 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   if (size_len > column_info->size_width)
     column_info->size_width = size_len;
 
-  /* if (ft_strchr(info->name, ' ') != NULL) { */
-  if (ft_has_set(info->name, " $") != NULL) {
+  char *has_set = ft_has_set(info->name, name_set);
+
+  if (has_set != NULL) {
     if (!column_info->print_quote)
       column_info->print_quote = true;
+
     info->print_quote = true;
+
+    if (has_set[0] == '\'')
+      info->has_single_quote = true;
+    else
+      info->has_single_quote = false;
+
   } else
     info->print_quote = false;
 }
@@ -1103,9 +1211,17 @@ void out_long_format(Input *input) {
     }
 
     if (print_quotes && file_info->print_quote) {
-      output_buffering(out, &pos, capacity, "'");
+      if (file_info->has_single_quote)
+        output_buffering(out, &pos, capacity, "\"");
+      else
+        output_buffering(out, &pos, capacity, "'");
+
       output_buffering(out, &pos, capacity, file_info->name);
-      output_buffering(out, &pos, capacity, "'");
+
+      if (file_info->has_single_quote)
+        output_buffering(out, &pos, capacity, "\"");
+      else
+        output_buffering(out, &pos, capacity, "'");
     } else
       output_buffering(out, &pos, capacity, file_info->name);
 
@@ -1209,11 +1325,12 @@ void process_dir_content(FileInfo *file_info, int depth) {
   DIR *o_dir = opendir(name);
 
   if (!o_dir) {
-    ft_putstr(2, program_name);
-    ft_putstr(2, ": cannot open directory '");
-    ft_putstr(2, name);
-    ft_putstr(2, "': ");
-    perror("");
+    ft_putstr(1, program_name);
+    ft_putstr(1, ": cannot open directory '");
+    ft_putstr(1, name);
+    ft_putstr(1, "': ");
+    ft_putstr(1, strerror(errno));
+    ft_putchar(1, '\n');
 
     return;
   }
@@ -1223,13 +1340,25 @@ void process_dir_content(FileInfo *file_info, int depth) {
       ft_putchar(1, '\n');
     depth++;
 
-    bool print_quote = ft_has_set(name, " $") != NULL;
+    char *has_set = ft_has_set(name, name_set);
+    bool print_quote = has_set != NULL;
 
-    if (print_quote)
-      ft_putchar(1, '\'');
+    if (print_quote) {
+      if (has_set[0] == '\'')
+        ft_putchar(1, '"');
+      else
+        ft_putchar(1, '\'');
+    }
+
     ft_putstr(1, name);
-    if (print_quote)
-      ft_putchar(1, '\'');
+
+    if (print_quote) {
+      if (has_set[0] == '\'')
+        ft_putchar(1, '"');
+      else
+        ft_putchar(1, '\'');
+    }
+
     ft_putstr(1, ":\n");
   }
 
@@ -1367,7 +1496,8 @@ void process_inputs(void) {
 int main(int argc, char *argv[]) {
   init_inputs();
 
-  program_name = argv[0];
+  /* program_name = argv[0]; */
+  program_name = "/bin/ls";
 
   if (parse_args(argc, argv) == 0) {
     sort_inputs();
