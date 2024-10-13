@@ -7,6 +7,7 @@
 #include <grp.h>
 #include <pwd.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,6 +75,7 @@ typedef struct {
   size_t owner_width;
   size_t group_width;
   size_t size_width;
+  size_t block_size;
 
   // many_per_line info
   size_t term_width;
@@ -137,8 +139,8 @@ static char *VALID_OPTIONS[][4] = {
     {"-f", NULL, "do not sort, enable -aU, disable -ls --color", NULL},
     {"-g", NULL, "like -l, but do not list owner", NULL},
     {"-G", "--no-group", "in a long listing, don't print group names", NULL},
-    {"-h", "--human-readable",
-     "with -l and -s, print sizes like 1K 234M 2G etc.", NULL},
+    /* {"-h", "--human-readable", */
+    /*  "with -l and -s, print sizes like 1K 234M 2G etc.", NULL}, */
     {"-l", NULL, "use a long listing format", NULL},
     {"-N", "--literal", "print entry names without quoting", NULL},
     {"-o", NULL, "like -l, but do not list group information", NULL},
@@ -151,8 +153,8 @@ static char *VALID_OPTIONS[][4] = {
      "sort by name; otherwise: sort by acces time, newest first",
      NULL},
     {"-U", NULL, "do not sort; list entries in directory order", NULL},
-    {"-x", NULL, "list entries by lines instead of by columns", NULL},
-    {"-1", NULL, "list one file per line", NULL},
+    /* {"-x", NULL, "list entries by lines instead of by columns", NULL}, */
+    /* {"-1", NULL, "list one file per line", NULL}, */
 
     {NULL, NULL},
 };
@@ -220,6 +222,7 @@ void init_column_info(ColumnInfo *column_info) {
   column_info->owner_width = 0;
   column_info->nlink_width = 0;
   column_info->size_width = 0;
+  column_info->block_size = 0;
 
   column_info->term_width = get_terminal_width();
   column_info->num_columns = 0;
@@ -578,32 +581,6 @@ char *skip_dots(char *str) {
   return &str[i];
 }
 
-int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
-  long ret = b->stat->st_size - a->stat->st_size;
-
-  if (ret < 0)
-    return -1;
-  else if (ret > 0)
-    return 1;
-
-  return 0;
-}
-
-int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
-  long long s1_time_ns =
-      (a->stat->st_mtim.tv_sec * 1000000000) + a->stat->st_mtim.tv_nsec;
-  long long s2_time_ns =
-      (b->stat->st_mtim.tv_sec * 1000000000) + b->stat->st_mtim.tv_nsec;
-  long long result = s1_time_ns - s2_time_ns;
-
-  if (result < 0)
-    return 1;
-  else if (result > 0)
-    return -1;
-
-  return 0;
-}
-
 int ft_is_in_set(char c, char *set) {
   for (int i = 0; set[i] != '\0'; i++) {
     if (c == set[i])
@@ -650,6 +627,31 @@ int ft_strcoll_lowercase(char *s1, char *s2) {
 
 int file_info_cmp_by_name(FileInfo *a, FileInfo *b) {
   return ft_strcoll_lowercase(a->name, b->name);
+}
+
+int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
+  long ret = b->stat->st_size - a->stat->st_size;
+
+  if (ret < 0)
+    return -1;
+  else if (ret > 0)
+    return 1;
+
+  return file_info_cmp_by_name(a, b);
+}
+
+int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
+  int64_t s1_time_ns =
+      (a->stat->st_mtim.tv_sec * 1000000000LL) + a->stat->st_mtim.tv_nsec;
+  int64_t s2_time_ns =
+      (b->stat->st_mtim.tv_sec * 1000000000LL) + b->stat->st_mtim.tv_nsec;
+
+  if (s1_time_ns < s2_time_ns)
+    return 1;
+  else if (s1_time_ns > s2_time_ns)
+    return -1;
+
+  return file_info_cmp_by_name(a, b);
 }
 
 void sort_inputs(void) {
@@ -859,6 +861,8 @@ char *get_group_name(gid_t gid) {
 }
 
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
+  column_info->block_size += info->stat->st_blocks;
+
   ssize_t ret = getxattr(info->name, "system.posix_acl_access", NULL, 0);
 
   if (ret >= 0) {
@@ -1098,9 +1102,16 @@ void out_long_format(Input *input) {
   }
 }
 
+void print_block_size(unsigned long size) {
+  ft_putstr(1, "total ");
+  ft_putnbr(1, size / 2);
+  ft_putstr(1, "\n");
+}
+
 void print_out_format(Input input) {
   if (format == long_format) {
     calc_long_format(&input);
+    print_block_size(input.column_info.block_size);
     out_long_format(&input);
   } else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
@@ -1230,9 +1241,10 @@ void process_dir_content(FileInfo *file_info, int depth) {
   if (sort_reverse)
     ft_list_reverse(&input.list);
 
-  if (format == long_format)
+  if (format == long_format) {
+    print_block_size(input.column_info.block_size);
     out_long_format(&input);
-  else if (format == many_per_line) {
+  } else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
 
     calc_many_per_line_format(&input, list);
