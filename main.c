@@ -522,6 +522,24 @@ FileInfo *create_file_info(char *name, struct stat *stat) {
   return info;
 }
 
+int ft_is_in_set(char c, char *set) {
+  for (int i = 0; set[i] != '\0'; i++) {
+    if (c == set[i])
+      return 1;
+  }
+
+  return 0;
+}
+
+char *ft_has_set(char *str, char *set) {
+  for (int i = 0; str[i] != '\0'; i++) {
+    if (ft_is_in_set(str[i], set))
+      return &str[i];
+  }
+
+  return NULL;
+}
+
 int parse_args(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (ft_strcmp(argv[i], "--help") == 0) {
@@ -554,7 +572,8 @@ int parse_args(int argc, char **argv) {
       } else {
         FileInfo *info = create_file_info(ft_strdup(argv[i]), stat);
 
-        if (ft_strchr(argv[i], ' ') != NULL) {
+        if (ft_has_set(argv[i], " $") != NULL) {
+          /* if (ft_strchr(argv[i], ' ') != NULL) { */
           info->print_quote = true;
 
           if (!all.column_info.print_quote) {
@@ -581,17 +600,8 @@ char *skip_dots(char *str) {
   return &str[i];
 }
 
-int ft_is_in_set(char c, char *set) {
-  for (int i = 0; set[i] != '\0'; i++) {
-    if (c == set[i])
-      return 1;
-  }
-
-  return 0;
-}
-
 int ft_strcoll_lowercase(char *s1, char *s2) {
-  char *set = "._";
+  char *set = "._-+, ";
   int i = 0, j = 0;
 
   while (s1[i] != '\0' && s2[j] != '\0') {
@@ -717,7 +727,7 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
           size_t len = ft_strlen(list[index]->name);
 
           if (print_quotes) {
-            if (ft_strchr(list[index]->name, ' ') != NULL) {
+            if (ft_has_set(list[index]->name, " $") != NULL) {
               input->column_info.print_quote = true;
               input->column_info.gap = 3;
               list[index]->print_quote = true;
@@ -796,7 +806,7 @@ void out_column_format(Input *input, FileInfo **list) {
                    column_info.gap;
 
           if (print_quotes && next_word < input->size &&
-              ft_strchr(list[next_word]->name, ' ') != NULL) {
+              ft_has_set(list[next_word]->name, " $") != NULL) {
             spaces--;
           }
         }
@@ -905,7 +915,8 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   if (size_len > column_info->size_width)
     column_info->size_width = size_len;
 
-  if (ft_strchr(info->name, ' ') != NULL) {
+  /* if (ft_strchr(info->name, ' ') != NULL) { */
+  if (ft_has_set(info->name, " $") != NULL) {
     if (!column_info->print_quote)
       column_info->print_quote = true;
     info->print_quote = true;
@@ -928,6 +939,31 @@ void calc_long_format(Input *input) {
 
 char *get_permission(bool condition, char *value) {
   return condition ? value : "-";
+}
+
+char *get_time(FileInfo *file_info) {
+  time_t now, last_update = file_info->stat->st_mtim.tv_sec;
+  char *time_str = ctime(&last_update);
+  char *ret = NULL;
+
+  double six_months_in_seconds = 182.5 * 24 * 60 * 60;
+
+  time(&now);
+
+  if (last_update > now - six_months_in_seconds) {
+    ret = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
+                    ft_last_index_of(time_str, ':') - 1);
+  } else {
+    char *year = ft_substr(time_str, ft_last_index_of(time_str, ' '),
+                           ft_strlen(time_str) - 2);
+
+    char *tmp = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
+                          ft_index_of(time_str, ':') - 3);
+
+    ret = ft_strjoin(tmp, year);
+  }
+
+  return ret;
 }
 
 void out_long_format(Input *input) {
@@ -1037,12 +1073,19 @@ void out_long_format(Input *input) {
 
     output_buffering(out, &pos, capacity, " ");
 
-    char *time = ctime(&file_info->stat->st_mtim.tv_sec);
-    char *tmp = ft_substr(time, ft_index_of(time, ' ') + 1,
-                          ft_last_index_of(time, ':') - 1);
-    if (tmp != NULL) {
-      output_buffering(out, &pos, capacity, tmp);
-      free(tmp);
+    char *time = get_time(file_info);
+
+    if (time != NULL) {
+      size = 12 - ft_strlen(time);
+
+      while (size > 0) {
+        output_buffering(out, &pos, capacity, " ");
+
+        size--;
+      }
+
+      output_buffering(out, &pos, capacity, time);
+      free(time);
     }
 
     output_buffering(out, &pos, capacity, " ");
@@ -1180,7 +1223,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
       ft_putchar(1, '\n');
     depth++;
 
-    bool print_quote = ft_strchr(name, ' ') != NULL;
+    bool print_quote = ft_has_set(name, " $") != NULL;
 
     if (print_quote)
       ft_putchar(1, '\'');
