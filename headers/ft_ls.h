@@ -2,8 +2,10 @@
 #define FT_LS
 
 #include "../libcft/ds/list/ft_list.h"
+#include "../libcft/io/ft_io.h"
+#include "../libcft/number/ft_number.h"
 #include "../libcft/string/ft_string.h"
-#include "ft_lib.h"
+#include "../libcft/table/ft_table.h"
 #include <asm-generic/ioctls.h>
 #include <dirent.h>
 #include <fcntl.h>
