@@ -7,7 +7,7 @@ RED="\033[1;31m"
 ls="/bin/ls"
 ft_ls="./ft_ls"
 
-test_dir=".."
+test_dir="/home/issamdounejjar/"
 
 options=$($ft_ls --help | grep -oE '^ *-[a-zA-Z0-9]' | sort | uniq | tr -d '\n -')
 
@@ -44,3 +44,5 @@ for opt in $(echo $options | fold -w1); do
     echo -e "$RED[x]$WHITE"
   fi
 done
+
+rm -rf $ls_result $ft_ls_result
