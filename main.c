@@ -54,7 +54,8 @@ static bool immediate_dirs;
 static bool ignore_hidden_files = true;
 static bool ignore_dots;
 static bool print_quotes = true;
-/* static bool print_access_time = true; */
+static bool print_access_time = true;
+static bool _u;
 
 enum Filetype { directory, normal, symbolic_link, executable, sticky_bit };
 
@@ -63,7 +64,13 @@ static char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
 
 static char filetype_letter[] = "d-l-";
 
-enum SortType { sort_none = -1, sort_name, sort_time, sort_size };
+enum SortType {
+  sort_none = -1,
+  sort_name,
+  sort_update_time,
+  sort_access_time,
+  sort_size
+};
 
 enum Format { long_format, one_per_line, many_per_line, with_commas };
 
@@ -469,7 +476,7 @@ char set_option(char c, char *opt) {
   } else if (c == 'S') {
     sort_type = sort_size;
   } else if (c == 't') {
-    sort_type = sort_time;
+    sort_type = sort_update_time;
   } else if (c == 'u') {
   } else if (c == 'U') {
     sort_type = sort_none;
@@ -603,6 +610,16 @@ int parse_args(int argc, char **argv) {
         all.size++;
       }
     }
+  }
+
+  if (_u) {
+    if (format == long_format && sort_type == sort_update_time) {
+      print_access_time = true;
+      sort_type = sort_access_time;
+    } else if (format == long_format)
+      print_access_time = true;
+    else
+      sort_type = sort_access_time;
   }
 
   return 0;
@@ -742,7 +759,7 @@ int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
   return file_info_cmp_by_name(a, b);
 }
 
-int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
+int file_info_cmp_by_update_time(FileInfo *a, FileInfo *b) {
   int64_t s1_time_ns =
       (a->stat->st_mtim.tv_sec * 1000000000LL) + a->stat->st_mtim.tv_nsec;
   int64_t s2_time_ns =
@@ -756,9 +773,25 @@ int file_info_cmp_by_time(FileInfo *a, FileInfo *b) {
   return file_info_cmp_by_name(a, b);
 }
 
+int file_info_cmp_by_access_time(FileInfo *a, FileInfo *b) {
+  int64_t s1_time_ns =
+      (a->stat->st_atim.tv_sec * 1000000000LL) + a->stat->st_atim.tv_nsec;
+  int64_t s2_time_ns =
+      (b->stat->st_atim.tv_sec * 1000000000LL) + b->stat->st_atim.tv_nsec;
+
+  if (s1_time_ns < s2_time_ns)
+    return 1;
+  else if (s1_time_ns > s2_time_ns)
+    return -1;
+
+  return file_info_cmp_by_name(a, b);
+}
+
 void sort_inputs(void) {
-  if (sort_type == sort_time)
-    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_time);
+  if (sort_type == sort_update_time)
+    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_update_time);
+  else if (sort_type == sort_access_time)
+    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_access_time);
   else if (sort_type == sort_name)
     ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_name);
   else if (sort_type == sort_size)
@@ -1050,15 +1083,16 @@ char *get_permission(bool condition, char *value) {
 }
 
 char *get_time(FileInfo *file_info) {
-  time_t now, last_update = file_info->stat->st_mtim.tv_sec;
-  char *time_str = ctime(&last_update);
+  time_t now, file_time = print_access_time ? file_info->stat->st_atim.tv_sec
+                                            : file_info->stat->st_mtim.tv_sec;
+  char *time_str = ctime(&file_time);
   char *ret = NULL;
 
   double six_months_in_seconds = 182.5 * 24 * 60 * 60;
 
   time(&now);
 
-  if (last_update > now - six_months_in_seconds) {
+  if (file_time > now - six_months_in_seconds) {
     ret = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
                     ft_last_index_of(time_str, ':') - 1);
   } else {
@@ -1403,8 +1437,10 @@ void process_dir_content(FileInfo *file_info, int depth) {
     input.size++;
   }
 
-  if (sort_type == sort_time)
-    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_time);
+  if (sort_type == sort_update_time)
+    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_update_time);
+  else if (sort_type == sort_access_time)
+    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_access_time);
   else if (sort_type == sort_name)
     ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_name);
   else if (sort_type == sort_size)
