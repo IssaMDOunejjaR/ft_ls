@@ -1,3 +1,5 @@
+.PHONY: lib
+	
 EXEC			= ft_ls
 LIB_PATH	= ./libcft
 SRCS			= $(wildcard ./utils/*.c)
