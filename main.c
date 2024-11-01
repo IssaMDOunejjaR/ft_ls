@@ -478,6 +478,7 @@ char set_option(char c, char *opt) {
   } else if (c == 't') {
     sort_type = sort_update_time;
   } else if (c == 'u') {
+    _u = true;
   } else if (c == 'U') {
     sort_type = sort_none;
     sort_reverse = false;
@@ -618,8 +619,9 @@ int parse_args(int argc, char **argv) {
       sort_type = sort_access_time;
     } else if (format == long_format)
       print_access_time = true;
-    else
+    else {
       sort_type = sort_access_time;
+    }
   }
 
   return 0;
@@ -1083,8 +1085,8 @@ char *get_permission(bool condition, char *value) {
 }
 
 char *get_time(FileInfo *file_info) {
-  time_t now, file_time = print_access_time ? file_info->stat->st_atim.tv_sec
-                                            : file_info->stat->st_mtim.tv_sec;
+  time_t now, file_time = print_access_time ? file_info->stat->st_mtim.tv_sec
+                                            : file_info->stat->st_atim.tv_sec;
   char *time_str = ctime(&file_time);
   char *ret = NULL;
 
