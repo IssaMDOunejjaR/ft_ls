@@ -42,7 +42,7 @@ typedef void (*FormatFunc)(void *, void *);
 static int exit_status;
 
 char *program_name;
-char *name_set = " $'\"[]()!";
+char *name_set = " $'\"[]=()!";
 
 // Options
 static bool sort_reverse;
@@ -54,7 +54,7 @@ static bool immediate_dirs;
 static bool ignore_hidden_files = true;
 static bool ignore_dots;
 static bool print_quotes = true;
-static bool print_access_time = true;
+static bool print_access_time = false;
 static bool _u;
 
 enum Filetype { directory, normal, symbolic_link, executable, sticky_bit };
@@ -65,7 +65,8 @@ static char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
 static char filetype_letter[] = "d-l-";
 
 enum SortType {
-  sort_none = -1,
+  not_sort = -1,
+  sort_none,
   sort_name,
   sort_update_time,
   sort_access_time,
@@ -448,6 +449,7 @@ char set_option(char c, char *opt) {
     return 1;
   } else if (c == 'a') {
     ignore_hidden_files = false;
+    ignore_dots = false;
   } else if (c == 'A') {
     ignore_hidden_files = false;
     ignore_dots = true;
@@ -458,7 +460,7 @@ char set_option(char c, char *opt) {
     print_with_color = false;
     format = many_per_line;
     ignore_hidden_files = false;
-    sort_reverse = false;
+    ignore_dots = false;
   } else if (c == 'g') {
     print_owner = false;
     format = long_format;
@@ -470,17 +472,24 @@ char set_option(char c, char *opt) {
     print_group = false;
     format = long_format;
   } else if (c == 'r') {
-    sort_reverse = true;
+    if (sort_type != not_sort)
+      sort_reverse = true;
   } else if (c == 'R') {
     recursive = true;
   } else if (c == 'S') {
     sort_type = sort_size;
   } else if (c == 't') {
-    sort_type = sort_update_time;
+    if (_u)
+      sort_type = sort_access_time;
+    else
+      sort_type = sort_update_time;
   } else if (c == 'u') {
+    print_access_time = true;
+    if (sort_type != not_sort && sort_type != sort_size)
+      sort_type = sort_access_time;
     _u = true;
   } else if (c == 'U') {
-    sort_type = sort_none;
+    sort_type = not_sort;
     sort_reverse = false;
   } else if (c == 'G') {
     print_group = false;
@@ -614,14 +623,25 @@ int parse_args(int argc, char **argv) {
   }
 
   if (_u) {
-    if (format == long_format && sort_type == sort_update_time) {
-      print_access_time = true;
-      sort_type = sort_access_time;
-    } else if (format == long_format)
-      print_access_time = true;
-    else {
-      sort_type = sort_access_time;
+    if (sort_type != not_sort && sort_type != sort_size) {
+      if (format == long_format) {
+        if (sort_type == sort_update_time)
+          sort_type = sort_access_time;
+        else
+          sort_type = sort_name;
+      }
+      /* else sort_type = sort_access_time; */
     }
+
+    /* if (format == long_format && sort_type == sort_update_time) { */
+    /*   print_access_time = true; */
+    /*   sort_type = sort_access_time; */
+    /* } else if (format == long_format) { */
+    /*   print_access_time = true; */
+    /*   sort_type = sort_name; */
+    /* } else { */
+    /*   sort_type = sort_access_time; */
+    /* } */
   }
 
   return 0;
@@ -747,7 +767,7 @@ int ft_strcoll_lowercase(char *s1, char *s2) {
 }
 
 int file_info_cmp_by_name(FileInfo *a, FileInfo *b) {
-  return ft_strcoll_lowercase(a->name, b->name);
+  return ft_strcmp(a->name, b->name);
 }
 
 int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
@@ -1008,7 +1028,8 @@ char *get_group_name(gid_t gid) {
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   column_info->block_size += info->stat->st_blocks;
 
-  ssize_t ret = getxattr(info->name, "system.posix_acl_access", NULL, 0);
+  ssize_t ret = getxattr(info->fullname ? info->fullname : info->name,
+                         "system.posix_acl_access", NULL, 0);
 
   if (ret >= 0) {
     column_info->print_acl = true;
@@ -1085,8 +1106,16 @@ char *get_permission(bool condition, char *value) {
 }
 
 char *get_time(FileInfo *file_info) {
-  time_t now, file_time = print_access_time ? file_info->stat->st_mtim.tv_sec
-                                            : file_info->stat->st_atim.tv_sec;
+  time_t now, file_time;
+
+  if (print_access_time) {
+    file_time = file_info->stat->st_atim.tv_sec +
+                (file_info->stat->st_atim.tv_nsec / 1000000000LL);
+  } else {
+    file_time = file_info->stat->st_mtim.tv_sec +
+                (file_info->stat->st_mtim.tv_nsec / 1000000000LL);
+  }
+
   char *time_str = ctime(&file_time);
   char *ret = NULL;
 
@@ -1306,7 +1335,8 @@ void print_block_size(unsigned long size) {
 void print_out_format(Input input) {
   if (format == long_format) {
     calc_long_format(&input);
-    print_block_size(input.column_info.block_size);
+    if (!immediate_dirs)
+      print_block_size(input.column_info.block_size);
     out_long_format(&input);
   } else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
@@ -1377,7 +1407,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
     depth++;
 
     char *has_set = ft_has_set(name, name_set);
-    bool print_quote = has_set != NULL;
+    bool print_quote = print_quotes && has_set != NULL;
 
     if (print_quote) {
       if (has_set[0] == '\'')
@@ -1514,7 +1544,25 @@ void process_inputs(void) {
         FileInfo *info = list->data;
 
         if (dirs.size > 1 || files.size > 0) {
+          char *has_set = ft_has_set(info->name, name_set);
+          bool print_quote = print_quotes && has_set != NULL;
+
+          if (print_quote) {
+            if (has_set[0] == '\'')
+              ft_putchar(1, '"');
+            else
+              ft_putchar(1, '\'');
+          }
+
           ft_putstr(1, info->name);
+
+          if (print_quote) {
+            if (has_set[0] == '\'')
+              ft_putchar(1, '"');
+            else
+              ft_putchar(1, '\'');
+          }
+
           ft_putstr(1, ":\n");
         }
 
