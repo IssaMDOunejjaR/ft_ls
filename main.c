@@ -1,5 +1,100 @@
 #include "ft_ls.h"
 
+typedef void (*ClearFunc)(void *);
+typedef int (*CompareFunc)(void *, void *);
+typedef void (*FormatFunc)(void *, void *);
+
+int exit_status;
+
+// Options
+bool sort_reverse;
+bool print_owner = true;
+bool print_group = true;
+bool print_with_color;
+bool recursive;
+bool immediate_dirs;
+bool ignore_hidden_files = true;
+bool ignore_dots;
+bool print_quotes = true;
+bool print_access_time = false;
+bool _u;
+
+enum Filetype { directory, normal, symbolic_link, executable, sticky_bit };
+
+char filetype_letter[] = "d-l-";
+
+enum SortType {
+  not_sort = -1,
+  sort_none,
+  sort_name,
+  sort_update_time,
+  sort_access_time,
+  sort_size
+};
+
+enum Format { long_format, one_per_line, many_per_line, with_commas };
+
+// Information about filling a column
+typedef struct {
+  bool print_quote;
+  bool print_acl;
+
+  // long_format info
+  size_t nlink_width;
+  size_t owner_width;
+  size_t group_width;
+  size_t size_width;
+  size_t block_size;
+
+  // many_per_line info
+  size_t term_width;
+  size_t num_columns;
+  size_t num_rows;
+  size_t gap;
+  size_t *col_widths;
+} ColumnInfo;
+
+// Informations about a file
+typedef struct {
+  char *name;
+  char *fullname;
+
+  bool print_quote;
+  bool print_acl;
+  bool has_single_quote;
+
+  char *owner_name;
+  char *group_name;
+
+  struct stat *stat;
+
+  enum Filetype filetype;
+} FileInfo;
+
+typedef struct {
+  List *list;
+  size_t size;
+  ColumnInfo column_info;
+  bool error;
+} Input;
+
+typedef struct OwnerCache {
+  uid_t uid;
+  char *owner_name;
+  struct OwnerCache *next;
+} OwnerCache;
+
+typedef struct GroupCache {
+  gid_t gid;
+  char *group_name;
+  struct GroupCache *next;
+} GroupCache;
+
+char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
+                          EXECUTABLE_COLOR, STICKY_BIT_COLOR};
+char *program_name;
+Input all, files, dirs;
+
 char *name_set = " $'\"[]=()!";
 
 OwnerCache *owner_cache = NULL;
@@ -38,6 +133,84 @@ static char *VALID_OPTIONS[][4] = {
     {NULL, NULL},
 };
 
+void clear_file_info(FileInfo *file_info) {
+  free(file_info->name);
+  free(file_info->fullname);
+  free(file_info->stat);
+
+  free(file_info);
+}
+
+void clear_inputs(void) {
+  ft_list_clear(all.list, (ClearFunc)&clear_file_info);
+  ft_list_clear(files.list, (ClearFunc)&clear_file_info);
+  ft_list_clear(dirs.list, (ClearFunc)&clear_file_info);
+
+  while (group_cache != NULL) {
+    free(group_cache->group_name);
+    GroupCache *tmp = group_cache;
+    group_cache = group_cache->next;
+    free(tmp);
+  }
+
+  while (owner_cache != NULL) {
+    free(owner_cache->owner_name);
+    OwnerCache *tmp = owner_cache;
+    owner_cache = owner_cache->next;
+    free(tmp);
+  }
+}
+
+void clear_column_info(ColumnInfo *column_info) {
+  free(column_info->col_widths);
+}
+
+static size_t get_terminal_width(void) {
+  struct winsize w;
+
+  if (ioctl(0, TIOCGWINSZ, &w) == -1) {
+    perror("ioctl");
+
+    return 0;
+  }
+
+  return w.ws_col;
+}
+
+void init_column_info(ColumnInfo *column_info) {
+  column_info->print_quote = false;
+  column_info->print_acl = false;
+
+  column_info->group_width = 0;
+  column_info->owner_width = 0;
+  column_info->nlink_width = 0;
+  column_info->size_width = 0;
+  column_info->block_size = 0;
+
+  column_info->term_width = get_terminal_width();
+  column_info->num_columns = 0;
+  column_info->num_rows = 0;
+  column_info->gap = 2;
+  column_info->col_widths = NULL;
+}
+
+void init_inputs(void) {
+  all.list = NULL;
+  all.size = 0;
+  all.error = false;
+  init_column_info(&all.column_info);
+
+  files.list = NULL;
+  files.size = 0;
+  files.error = false;
+  init_column_info(&files.column_info);
+
+  dirs.list = NULL;
+  dirs.size = 0;
+  dirs.error = false;
+  init_column_info(&dirs.column_info);
+}
+
 void output_buffering(char *arr, size_t *pos, size_t capacity, char *str) {
   size_t len = ft_strlen(str);
 
@@ -60,79 +233,99 @@ void output_buffering(char *arr, size_t *pos, size_t capacity, char *str) {
   }
 }
 
-void print_short_option_not_found(char option) {
-  char *prefix = "ft_ls: invalid option -- '";
-  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+void print_file_name(FileInfo *file_info, enum Filetype file_type) {
+  size_t capacity = 20;
+  char out[capacity];
+  size_t pos = 0;
 
-  size_t prefix_len = ft_strlen(prefix);
-  size_t option_len = 1;
-  size_t suffix_len = ft_strlen(suffix);
+  if (print_with_color)
+    output_buffering(out, &pos, capacity, filetype_color[file_type]);
 
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+  if (print_quotes && file_info->print_quote) {
+    if (file_info->has_single_quote)
+      output_buffering(out, &pos, capacity, "\"");
+    else
+      output_buffering(out, &pos, capacity, "'");
+  }
 
-  if (msg == NULL)
-    return;
+  output_buffering(out, &pos, capacity, file_info->name);
 
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, &option);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
+  if (print_quotes && file_info->print_quote) {
+    if (file_info->has_single_quote)
+      output_buffering(out, &pos, capacity, "\"");
+    else
+      output_buffering(out, &pos, capacity, "'");
+  }
 
-  msg[prefix_len + option_len + suffix_len] = '\0';
+  output_buffering(out, &pos, capacity, WHITE);
 
-  ft_putstr(2, msg);
-
-  free(msg);
+  ft_putstr(1, out);
 }
 
-void print_long_option_not_found(char *option) {
-  char *prefix = "ft_ls: unrecognized option '";
-  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+void print_help() {
+  ft_putstr(1, "Usage: ");
+  ft_putstr(1, program_name);
+  ft_putstr(1,
+            " [OPTION]... [FILE]...\nList information about the "
+            "FILEs (the current directory by default).\n\nMandatory arguments "
+            "to long options are mandatory for short options too.\n");
 
-  size_t prefix_len = ft_strlen(prefix);
-  size_t option_len = ft_strlen(option);
-  size_t suffix_len = ft_strlen(suffix);
+  int start_pad = 2;
+  int middle_gap = 5;
+  size_t left_pad = 0;
 
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+  for (int i = 0; VALID_OPTIONS[i][0] != NULL; i++) {
+    size_t len =
+        ft_strlen(VALID_OPTIONS[i][0]) + ft_strlen(VALID_OPTIONS[i][1]) + 2;
 
-  if (msg == NULL)
-    return;
+    if (left_pad < len)
+      left_pad = len;
+  }
 
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, option);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
+  left_pad += start_pad + middle_gap;
 
-  msg[prefix_len + option_len + suffix_len] = '\0';
+  for (int i = 0; VALID_OPTIONS[i][0] != NULL || VALID_OPTIONS[i][1] != NULL;
+       i++) {
+    for (int j = 0; j < start_pad; j++)
+      ft_putchar(1, ' ');
 
-  ft_putstr(2, msg);
+    if (VALID_OPTIONS[i][0] != NULL)
+      ft_putstr(1, VALID_OPTIONS[i][0]);
 
-  free(msg);
+    if (VALID_OPTIONS[i][0] != NULL && VALID_OPTIONS[i][1] != NULL)
+      ft_putstr(1, ", ");
+
+    if (VALID_OPTIONS[i][1] != NULL)
+      ft_putstr(1, VALID_OPTIONS[i][1]);
+
+    size_t option_len = ft_strlen(VALID_OPTIONS[i][0]) +
+                        ft_strlen(VALID_OPTIONS[i][1]) +
+                        (VALID_OPTIONS[i][0] && VALID_OPTIONS[i][1] ? 2 : 0);
+
+    for (size_t j = 0; j < (left_pad - option_len - start_pad) + middle_gap;
+         j++)
+      ft_putchar(1, ' ');
+
+    int max_paragraph_len = 70, count = 0;
+
+    for (int j = 0; VALID_OPTIONS[i][2][j] != '\0'; j++) {
+      ft_putchar(1, VALID_OPTIONS[i][2][j]);
+      count++;
+
+      if (count == max_paragraph_len) {
+        count = 0;
+        ft_putchar(1, '\n');
+
+        for (size_t k = 0; k < left_pad + middle_gap; k++)
+          ft_putchar(1, ' ');
+      }
+    }
+
+    ft_putchar(1, '\n');
+  }
 }
 
-void input_not_found(char *input) {
-  char *prefix = "ft_ls: cannot access '";
-  char *suffix = "': No such file or directory\n";
-
-  size_t prefix_len = ft_strlen(prefix);
-  size_t option_len = ft_strlen(input);
-  size_t suffix_len = ft_strlen(suffix);
-
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
-
-  if (msg == NULL)
-    return;
-
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, input);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
-
-  msg[prefix_len + option_len + suffix_len] = '\0';
-
-  ft_putstr(2, msg);
-
-  free(msg);
-}
-
-char set_option(char c, char *opt) {
+static char set_option(char c, char *opt) {
   if (opt != NULL) {
     if (ft_strcmp(opt, "--color") == 0) {
       print_with_color = true;
@@ -225,6 +418,303 @@ int get_opt(char short_opt, char *long_opt) {
   }
 
   return 0;
+}
+
+void print_short_option_not_found(char option) {
+  char *prefix = "ft_ls: invalid option -- '";
+  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = 1;
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, &option);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(2, msg);
+
+  free(msg);
+}
+
+char *get_permission(bool condition, char *value) {
+  return condition ? value : "-";
+}
+
+char *get_time(FileInfo *file_info) {
+  time_t now, file_time;
+
+  if (print_access_time) {
+    file_time = file_info->stat->st_atim.tv_sec +
+                (file_info->stat->st_atim.tv_nsec / 1000000000LL);
+  } else {
+    file_time = file_info->stat->st_mtim.tv_sec +
+                (file_info->stat->st_mtim.tv_nsec / 1000000000LL);
+  }
+
+  char *time_str = ctime(&file_time);
+  char *ret = NULL;
+
+  double six_months_in_seconds = 182.5 * 24 * 60 * 60;
+
+  time(&now);
+
+  if (file_time > now - six_months_in_seconds) {
+    ret = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
+                    ft_last_index_of(time_str, ':') - 1);
+  } else {
+    char *year = ft_substr(time_str, ft_last_index_of(time_str, ' '),
+                           ft_strlen(time_str) - 2);
+
+    char *tmp = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
+                          ft_index_of(time_str, ':') - 3);
+
+    ret = ft_strjoin(tmp, year);
+  }
+
+  return ret;
+}
+
+void out_long_format(Input *input) {
+  List *list = input->list;
+  ColumnInfo column_info = input->column_info;
+  size_t capacity = 256;
+  char out[capacity];
+
+  while (list != NULL) {
+    size_t pos = 0;
+    FileInfo *file_info = list->data;
+
+    char temp[2] = {filetype_letter[file_info->filetype], '\0'};
+
+    output_buffering(out, &pos, capacity, temp);
+
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IRUSR, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IWUSR, "w"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IEXEC, "x"));
+
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IRGRP, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IWGRP, "w"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IXGRP, "x"));
+
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IROTH, "r"));
+    output_buffering(out, &pos, capacity,
+                     get_permission(file_info->stat->st_mode & S_IWOTH, "w"));
+
+    if ((file_info->stat->st_mode & S_ISVTX))
+      output_buffering(out, &pos, capacity,
+                       get_permission(file_info->stat->st_mode & S_IXOTH, "t"));
+    else
+      output_buffering(out, &pos, capacity,
+                       get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
+
+    if (input->column_info.print_acl) {
+      if (file_info->print_acl)
+        output_buffering(out, &pos, capacity, "+");
+      else
+        output_buffering(out, &pos, capacity, " ");
+    }
+
+    output_buffering(out, &pos, capacity, " ");
+
+    int size = column_info.nlink_width -
+               ft_unsigned_number_len(file_info->stat->st_nlink);
+
+    while (size > 0) {
+      output_buffering(out, &pos, capacity, " ");
+
+      size--;
+    }
+
+    char *number = ft_unsigned_num_to_str(file_info->stat->st_nlink);
+    output_buffering(out, &pos, capacity, number);
+    free(number);
+
+    output_buffering(out, &pos, capacity, " ");
+
+    if (print_owner) {
+      output_buffering(out, &pos, capacity, file_info->owner_name);
+
+      size = column_info.owner_width - ft_strlen(file_info->owner_name);
+
+      while (size > 0) {
+        output_buffering(out, &pos, capacity, " ");
+
+        size--;
+      }
+
+      output_buffering(out, &pos, capacity, " ");
+    }
+
+    if (print_group) {
+      output_buffering(out, &pos, capacity, file_info->group_name);
+
+      size = column_info.group_width - ft_strlen(file_info->group_name);
+
+      while (size > 0) {
+        output_buffering(out, &pos, capacity, " ");
+
+        size--;
+      }
+
+      output_buffering(out, &pos, capacity, " ");
+    }
+
+    size =
+        column_info.size_width - ft_signed_number_len(file_info->stat->st_size);
+
+    while (size > 0) {
+      output_buffering(out, &pos, capacity, " ");
+
+      size--;
+    }
+
+    number = ft_signed_num_to_str(file_info->stat->st_size);
+    output_buffering(out, &pos, capacity, number);
+    free(number);
+
+    output_buffering(out, &pos, capacity, " ");
+
+    char *time = get_time(file_info);
+
+    if (time != NULL) {
+      size = 12 - ft_strlen(time);
+
+      while (size > 0) {
+        output_buffering(out, &pos, capacity, " ");
+
+        size--;
+      }
+
+      output_buffering(out, &pos, capacity, time);
+      free(time);
+    }
+
+    output_buffering(out, &pos, capacity, " ");
+
+    if (print_quotes && column_info.print_quote && !file_info->print_quote)
+      output_buffering(out, &pos, capacity, " ");
+
+    if (print_with_color) {
+      if ((file_info->stat->st_mode & S_ISVTX)) {
+        output_buffering(out, &pos, capacity, BLACK);
+        output_buffering(out, &pos, capacity, STICKY_BIT_COLOR);
+      } else
+        output_buffering(out, &pos, capacity,
+                         filetype_color[file_info->filetype]);
+    }
+
+    if (print_quotes && file_info->print_quote) {
+      if (file_info->has_single_quote)
+        output_buffering(out, &pos, capacity, "\"");
+      else
+        output_buffering(out, &pos, capacity, "'");
+
+      output_buffering(out, &pos, capacity, file_info->name);
+
+      if (file_info->has_single_quote)
+        output_buffering(out, &pos, capacity, "\"");
+      else
+        output_buffering(out, &pos, capacity, "'");
+    } else
+      output_buffering(out, &pos, capacity, file_info->name);
+
+    if (print_with_color) {
+      if ((file_info->stat->st_mode & S_ISVTX))
+        output_buffering(out, &pos, capacity, RESET_BACK);
+
+      output_buffering(out, &pos, capacity, WHITE);
+    }
+
+    while (size > 0) {
+      output_buffering(out, &pos, capacity, " ");
+
+      size--;
+    }
+
+    if (file_info->filetype == symbolic_link) {
+      output_buffering(out, &pos, capacity, " -> ");
+
+      char l_name[256];
+      ssize_t size = readlink(file_info->fullname, l_name, sizeof(l_name) - 1);
+
+      if (size != -1) {
+        l_name[size] = '\0';
+
+        output_buffering(out, &pos, capacity, l_name);
+      }
+    }
+
+    output_buffering(out, &pos, capacity, "\n");
+
+    out[pos] = '\0';
+
+    ft_putstr(1, out);
+
+    list = list->next;
+  }
+}
+
+void print_long_option_not_found(char *option) {
+  char *prefix = "ft_ls: unrecognized option '";
+  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = ft_strlen(option);
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, option);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(2, msg);
+
+  free(msg);
+}
+
+void input_not_found(char *input) {
+  char *prefix = "ft_ls: cannot access '";
+  char *suffix = "': No such file or directory\n";
+
+  size_t prefix_len = ft_strlen(prefix);
+  size_t option_len = ft_strlen(input);
+  size_t suffix_len = ft_strlen(suffix);
+
+  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+
+  if (msg == NULL)
+    return;
+
+  ft_strcpy(msg, prefix);
+  ft_strcpy(msg + prefix_len, input);
+  ft_strcpy(msg + prefix_len + option_len, suffix);
+
+  msg[prefix_len + option_len + suffix_len] = '\0';
+
+  ft_putstr(2, msg);
+
+  free(msg);
 }
 
 FileInfo *create_file_info(char *name, struct stat *stat) {
@@ -341,125 +831,6 @@ int parse_args(int argc, char **argv) {
     /*   sort_type = sort_access_time; */
     /* } */
   }
-
-  return 0;
-}
-
-char *skip_dots(char *str) {
-  int i = 0;
-
-  while (str[i] != '\0' && str[i] == '.')
-    i++;
-
-  return &str[i];
-}
-
-int ft_is_special_char(char c) {
-  if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-      (c >= '0' && c <= '9'))
-    return 0;
-
-  return 1;
-}
-
-int ft_strcmp_alphanum(char *s1, char *s2) {
-  int i = 0, j = 0;
-
-  while (s1[i] != '\0' && s2[j] != '\0') {
-    char a = s1[i];
-    char b = s2[j];
-
-    int is_a_in = ft_is_special_char(a);
-    int is_b_in = ft_is_special_char(b);
-
-    if (is_a_in || is_b_in) {
-      if (is_a_in)
-        i++;
-
-      if (is_b_in)
-        j++;
-
-      continue;
-    } else if (a != b)
-      return a - b;
-
-    i++;
-    j++;
-  }
-
-  char a = s1[i];
-  char b = s2[j];
-
-  if (a != b)
-    return a - b;
-
-  return 0;
-}
-
-int ft_strcmp_alphanum_case(char *s1, char *s2) {
-  int i = 0, j = 0;
-
-  while (s1[i] != '\0' && s2[j] != '\0') {
-    char a = ft_to_lower(s1[i]);
-    char b = ft_to_lower(s2[j]);
-
-    int is_a_in = ft_is_special_char(a);
-    int is_b_in = ft_is_special_char(b);
-
-    if (is_a_in || is_b_in) {
-      if (is_a_in)
-        i++;
-
-      if (is_b_in)
-        j++;
-
-      continue;
-    } else if (a != b)
-      return a - b;
-
-    i++;
-    j++;
-  }
-
-  char a = ft_to_lower(s1[i]);
-  char b = ft_to_lower(s2[j]);
-
-  if (a != b)
-    return a - b;
-
-  return 0;
-}
-
-int ft_strcoll_lowercase(char *s1, char *s2) {
-  int ret = ft_strcmp_alphanum_case(s1, s2);
-
-  if (ret != 0)
-    return ret;
-
-  /* size_t s1_len = ft_strlen(s1); */
-  /* size_t s2_len = ft_strlen(s2); */
-  /**/
-  /* if (s1_len < s2_len) */
-  /*   return 1; */
-  /* else if (s1_len > s2_len) */
-  /*   return -1; */
-
-  ret = ft_strcmp_lowercase(s1, s2);
-
-  if (ret != 0)
-    return ret;
-
-  ret = ft_strcmp_alphanum(s1, s2);
-
-  if (ret != 0)
-    return ret;
-
-  ret = ft_strcmp(s1, s2);
-
-  if (ret < 0)
-    return 1;
-  else if (ret > 0)
-    return -1;
 
   return 0;
 }
@@ -794,231 +1165,6 @@ void calc_long_format(Input *input) {
     FileInfo *file_info = list->data;
 
     update_column_info(file_info, column_info);
-
-    list = list->next;
-  }
-}
-
-char *get_permission(bool condition, char *value) {
-  return condition ? value : "-";
-}
-
-char *get_time(FileInfo *file_info) {
-  time_t now, file_time;
-
-  if (print_access_time) {
-    file_time = file_info->stat->st_atim.tv_sec +
-                (file_info->stat->st_atim.tv_nsec / 1000000000LL);
-  } else {
-    file_time = file_info->stat->st_mtim.tv_sec +
-                (file_info->stat->st_mtim.tv_nsec / 1000000000LL);
-  }
-
-  char *time_str = ctime(&file_time);
-  char *ret = NULL;
-
-  double six_months_in_seconds = 182.5 * 24 * 60 * 60;
-
-  time(&now);
-
-  if (file_time > now - six_months_in_seconds) {
-    ret = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
-                    ft_last_index_of(time_str, ':') - 1);
-  } else {
-    char *year = ft_substr(time_str, ft_last_index_of(time_str, ' '),
-                           ft_strlen(time_str) - 2);
-
-    char *tmp = ft_substr(time_str, ft_index_of(time_str, ' ') + 1,
-                          ft_index_of(time_str, ':') - 3);
-
-    ret = ft_strjoin(tmp, year);
-  }
-
-  return ret;
-}
-
-void out_long_format(Input *input) {
-  List *list = input->list;
-  ColumnInfo column_info = input->column_info;
-  size_t capacity = 256;
-  char out[capacity];
-
-  while (list != NULL) {
-    size_t pos = 0;
-    FileInfo *file_info = list->data;
-
-    char temp[2] = {filetype_letter[file_info->filetype], '\0'};
-
-    output_buffering(out, &pos, capacity, temp);
-
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IRUSR, "r"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IWUSR, "w"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IEXEC, "x"));
-
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IRGRP, "r"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IWGRP, "w"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IXGRP, "x"));
-
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IROTH, "r"));
-    output_buffering(out, &pos, capacity,
-                     get_permission(file_info->stat->st_mode & S_IWOTH, "w"));
-
-    if ((file_info->stat->st_mode & S_ISVTX))
-      output_buffering(out, &pos, capacity,
-                       get_permission(file_info->stat->st_mode & S_IXOTH, "t"));
-    else
-      output_buffering(out, &pos, capacity,
-                       get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
-
-    if (input->column_info.print_acl) {
-      if (file_info->print_acl)
-        output_buffering(out, &pos, capacity, "+");
-      else
-        output_buffering(out, &pos, capacity, " ");
-    }
-
-    output_buffering(out, &pos, capacity, " ");
-
-    int size = column_info.nlink_width -
-               ft_unsigned_number_len(file_info->stat->st_nlink);
-
-    while (size > 0) {
-      output_buffering(out, &pos, capacity, " ");
-
-      size--;
-    }
-
-    char *number = ft_unsigned_num_to_str(file_info->stat->st_nlink);
-    output_buffering(out, &pos, capacity, number);
-    free(number);
-
-    output_buffering(out, &pos, capacity, " ");
-
-    if (print_owner) {
-      output_buffering(out, &pos, capacity, file_info->owner_name);
-
-      size = column_info.owner_width - ft_strlen(file_info->owner_name);
-
-      while (size > 0) {
-        output_buffering(out, &pos, capacity, " ");
-
-        size--;
-      }
-
-      output_buffering(out, &pos, capacity, " ");
-    }
-
-    if (print_group) {
-      output_buffering(out, &pos, capacity, file_info->group_name);
-
-      size = column_info.group_width - ft_strlen(file_info->group_name);
-
-      while (size > 0) {
-        output_buffering(out, &pos, capacity, " ");
-
-        size--;
-      }
-
-      output_buffering(out, &pos, capacity, " ");
-    }
-
-    size =
-        column_info.size_width - ft_signed_number_len(file_info->stat->st_size);
-
-    while (size > 0) {
-      output_buffering(out, &pos, capacity, " ");
-
-      size--;
-    }
-
-    number = ft_signed_num_to_str(file_info->stat->st_size);
-    output_buffering(out, &pos, capacity, number);
-    free(number);
-
-    output_buffering(out, &pos, capacity, " ");
-
-    char *time = get_time(file_info);
-
-    if (time != NULL) {
-      size = 12 - ft_strlen(time);
-
-      while (size > 0) {
-        output_buffering(out, &pos, capacity, " ");
-
-        size--;
-      }
-
-      output_buffering(out, &pos, capacity, time);
-      free(time);
-    }
-
-    output_buffering(out, &pos, capacity, " ");
-
-    if (print_quotes && column_info.print_quote && !file_info->print_quote)
-      output_buffering(out, &pos, capacity, " ");
-
-    if (print_with_color) {
-      if ((file_info->stat->st_mode & S_ISVTX)) {
-        output_buffering(out, &pos, capacity, BLACK);
-        output_buffering(out, &pos, capacity, STICKY_BIT_COLOR);
-      } else
-        output_buffering(out, &pos, capacity,
-                         filetype_color[file_info->filetype]);
-    }
-
-    if (print_quotes && file_info->print_quote) {
-      if (file_info->has_single_quote)
-        output_buffering(out, &pos, capacity, "\"");
-      else
-        output_buffering(out, &pos, capacity, "'");
-
-      output_buffering(out, &pos, capacity, file_info->name);
-
-      if (file_info->has_single_quote)
-        output_buffering(out, &pos, capacity, "\"");
-      else
-        output_buffering(out, &pos, capacity, "'");
-    } else
-      output_buffering(out, &pos, capacity, file_info->name);
-
-    if (print_with_color) {
-      if ((file_info->stat->st_mode & S_ISVTX))
-        output_buffering(out, &pos, capacity, RESET_BACK);
-
-      output_buffering(out, &pos, capacity, WHITE);
-    }
-
-    while (size > 0) {
-      output_buffering(out, &pos, capacity, " ");
-
-      size--;
-    }
-
-    if (file_info->filetype == symbolic_link) {
-      output_buffering(out, &pos, capacity, " -> ");
-
-      char l_name[256];
-      ssize_t size = readlink(file_info->fullname, l_name, sizeof(l_name) - 1);
-
-      if (size != -1) {
-        l_name[size] = '\0';
-
-        output_buffering(out, &pos, capacity, l_name);
-      }
-    }
-
-    output_buffering(out, &pos, capacity, "\n");
-
-    out[pos] = '\0';
-
-    ft_putstr(1, out);
 
     list = list->next;
   }

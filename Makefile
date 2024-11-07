@@ -4,7 +4,7 @@ EXEC			= ft_ls
 LIB_PATH	= ./libcft
 SRCS			= $(wildcard ./utils/*.c)
 OBJS			= $(SRCS:.c=.o)
-FLAGS			= -Wall -Wextra -Werror -I ./headers
+FLAGS			= -Wall -Wextra -Werror
 
 all: $(EXEC)
 
@@ -24,6 +24,6 @@ clean:
 	rm -rf ./**/*.o
 
 fclean: clean
-	rm -rf $(NAME)
+	rm -rf $(EXEC)
 
 re: fclean all
