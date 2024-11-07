@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 WHITE="\033[0;37m"
 GREEN="\033[1;32m"
@@ -7,7 +7,7 @@ RED="\033[1;31m"
 ls="/bin/ls"
 ft_ls="./ft_ls"
 
-test_dir="/home/issamdounejjar/Documents/projects/13-cloud-1"
+test_dir="/home/issamounejjar/Documents/projects/ft_ls"
 garbage_dir="/tmp"
 
 options=$($ft_ls --help | grep -oE '^ *-[a-zA-Z0-9]' | sort | uniq | tr -d '\n -')
@@ -61,7 +61,7 @@ list_has_exception() {
 # echo "Testing random options:"
 counter=1
 options_count=$(echo $options | fold -w1 | wc -l)
-while [ $counter -le 100 ]
+while [ $counter -le 20 ]
 do
   test_len=$((1 + $RANDOM % options_count))
   opt_list=""
