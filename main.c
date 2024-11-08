@@ -1,9 +1,5 @@
 #include "ft_ls.h"
 
-typedef void (*ClearFunc)(void *);
-typedef int (*CompareFunc)(void *, void *);
-typedef void (*FormatFunc)(void *, void *);
-
 int exit_status;
 
 // Options
@@ -19,76 +15,7 @@ bool print_quotes = true;
 bool print_access_time = false;
 bool _u;
 
-enum Filetype { directory, normal, symbolic_link, executable, sticky_bit };
-
 char filetype_letter[] = "d-l-";
-
-enum SortType {
-  not_sort = -1,
-  sort_none,
-  sort_name,
-  sort_update_time,
-  sort_access_time,
-  sort_size
-};
-
-enum Format { long_format, one_per_line, many_per_line, with_commas };
-
-// Information about filling a column
-typedef struct {
-  bool print_quote;
-  bool print_acl;
-
-  // long_format info
-  size_t nlink_width;
-  size_t owner_width;
-  size_t group_width;
-  size_t size_width;
-  size_t block_size;
-
-  // many_per_line info
-  size_t term_width;
-  size_t num_columns;
-  size_t num_rows;
-  size_t gap;
-  size_t *col_widths;
-} ColumnInfo;
-
-// Informations about a file
-typedef struct {
-  char *name;
-  char *fullname;
-
-  bool print_quote;
-  bool print_acl;
-  bool has_single_quote;
-
-  char *owner_name;
-  char *group_name;
-
-  struct stat *stat;
-
-  enum Filetype filetype;
-} FileInfo;
-
-typedef struct {
-  List *list;
-  size_t size;
-  ColumnInfo column_info;
-  bool error;
-} Input;
-
-typedef struct OwnerCache {
-  uid_t uid;
-  char *owner_name;
-  struct OwnerCache *next;
-} OwnerCache;
-
-typedef struct GroupCache {
-  gid_t gid;
-  char *group_name;
-  struct GroupCache *next;
-} GroupCache;
 
 char *filetype_color[] = {DIRECTORY_COLOR, FILE_COLOR, SYMLINK_COLOR,
                           EXECUTABLE_COLOR, STICKY_BIT_COLOR};
@@ -103,7 +30,7 @@ GroupCache *group_cache = NULL;
 enum SortType sort_type = sort_name;
 enum Format format = many_per_line;
 
-static char *VALID_OPTIONS[][4] = {
+char *VALID_OPTIONS[][4] = {
     {"-a", "--all", "do not ignore entries starting with .", NULL},
     {"-A", "--almost_all", "do not list implied . and ..", NULL},
     {NULL, "--author", "with -l, print the author of each file", NULL},
@@ -165,7 +92,7 @@ void clear_column_info(ColumnInfo *column_info) {
   free(column_info->col_widths);
 }
 
-static size_t get_terminal_width(void) {
+size_t get_terminal_width(void) {
   struct winsize w;
 
   if (ioctl(0, TIOCGWINSZ, &w) == -1) {
@@ -325,7 +252,8 @@ void print_help() {
   }
 }
 
-static char set_option(char c, char *opt) {
+// TODO: improve
+char set_option(char c, char *opt) {
   if (opt != NULL) {
     if (ft_strcmp(opt, "--color") == 0) {
       print_with_color = true;
@@ -477,11 +405,15 @@ char *get_time(FileInfo *file_info) {
                           ft_index_of(time_str, ':') - 3);
 
     ret = ft_strjoin(tmp, year);
+
+    free(year);
+    free(tmp);
   }
 
   return ret;
 }
 
+// TODO: improve
 void out_long_format(Input *input) {
   List *list = input->list;
   ColumnInfo column_info = input->column_info;
@@ -738,24 +670,7 @@ FileInfo *create_file_info(char *name, struct stat *stat) {
   return info;
 }
 
-int ft_is_in_set(char c, char *set) {
-  for (int i = 0; set[i] != '\0'; i++) {
-    if (c == set[i])
-      return 1;
-  }
-
-  return 0;
-}
-
-char *ft_has_set(char *str, char *set) {
-  for (int i = 0; str[i] != '\0'; i++) {
-    if (ft_is_in_set(str[i], set))
-      return &str[i];
-  }
-
-  return NULL;
-}
-
+// TODO: improve
 int parse_args(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (ft_strcmp(argv[i], "--help") == 0) {
@@ -835,61 +750,18 @@ int parse_args(int argc, char **argv) {
   return 0;
 }
 
-int file_info_cmp_by_name(FileInfo *a, FileInfo *b) {
-  return ft_strcmp(a->name, b->name);
-}
-
-int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
-  long ret = b->stat->st_size - a->stat->st_size;
-
-  if (ret < 0)
-    return -1;
-  else if (ret > 0)
-    return 1;
-
-  return file_info_cmp_by_name(a, b);
-}
-
-int file_info_cmp_by_update_time(FileInfo *a, FileInfo *b) {
-  int64_t s1_time_ns =
-      (a->stat->st_mtim.tv_sec * 1000000000LL) + a->stat->st_mtim.tv_nsec;
-  int64_t s2_time_ns =
-      (b->stat->st_mtim.tv_sec * 1000000000LL) + b->stat->st_mtim.tv_nsec;
-
-  if (s1_time_ns < s2_time_ns)
-    return 1;
-  else if (s1_time_ns > s2_time_ns)
-    return -1;
-
-  return file_info_cmp_by_name(a, b);
-}
-
-int file_info_cmp_by_access_time(FileInfo *a, FileInfo *b) {
-  int64_t s1_time_ns =
-      (a->stat->st_atim.tv_sec * 1000000000LL) + a->stat->st_atim.tv_nsec;
-  int64_t s2_time_ns =
-      (b->stat->st_atim.tv_sec * 1000000000LL) + b->stat->st_atim.tv_nsec;
-
-  if (s1_time_ns < s2_time_ns)
-    return 1;
-  else if (s1_time_ns > s2_time_ns)
-    return -1;
-
-  return file_info_cmp_by_name(a, b);
-}
-
-void sort_inputs(void) {
+void sort_inputs(Input *input) {
   if (sort_type == sort_update_time)
-    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_update_time);
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_update_time);
   else if (sort_type == sort_access_time)
-    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_access_time);
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_access_time);
   else if (sort_type == sort_name)
-    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_name);
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_name);
   else if (sort_type == sort_size)
-    ft_list_sort(&all.list, (CompareFunc)&file_info_cmp_by_size);
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_size);
 
   if (sort_reverse)
-    ft_list_reverse(&all.list);
+    ft_list_reverse(&input->list);
 }
 
 FileInfo **input_list_to_table(Input input) {
@@ -909,6 +781,7 @@ FileInfo **input_list_to_table(Input input) {
   return tab;
 }
 
+// TODO: improve
 void calc_many_per_line_format(Input *input, FileInfo **list) {
   size_t num_columns = 1, num_rows = input->size;
   size_t *col_widths = NULL, *tmp = NULL;
@@ -1216,17 +1089,41 @@ void separate_input(void) {
   all.list = NULL;
 }
 
-void list_print(void *data) {
-  FileInfo *info = data;
+void print_current_dir_name(char *name) {
+  char *has_set = ft_has_set(name, name_set);
+  bool print_quote = print_quotes && has_set != NULL;
 
-  printf("'%s' -> { fullname: %s, size: %ld, last_update: %lu, "
-         "type: %s }\n",
-         info->name, info->fullname, info->stat->st_size,
-         info->stat->st_mtim.tv_sec,
-         info->filetype == normal || info->filetype == symbolic_link ? "FILE"
-                                                                     : "DIR");
+  if (print_quote) {
+    if (has_set[0] == '\'')
+      ft_putchar(1, '"');
+    else
+      ft_putchar(1, '\'');
+  }
+
+  ft_putstr(1, name);
+
+  if (print_quote) {
+    if (has_set[0] == '\'')
+      ft_putchar(1, '"');
+    else
+      ft_putchar(1, '\'');
+  }
+
+  ft_putstr(1, ":\n");
 }
 
+void print_error(char *input, char *message) {
+  ft_putstr(1, program_name);
+  ft_putstr(1, ": ");
+  ft_putstr(1, message);
+  ft_putstr(1, " '");
+  ft_putstr(1, input);
+  ft_putstr(1, "': ");
+  ft_putstr(1, strerror(errno));
+  ft_putchar(1, '\n');
+}
+
+// TODO: improve
 void process_dir_content(FileInfo *file_info, int depth) {
   char *name = file_info
                    ? file_info->fullname ? file_info->fullname : file_info->name
@@ -1235,13 +1132,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
   DIR *o_dir = opendir(name);
 
   if (!o_dir) {
-    ft_putstr(1, program_name);
-    ft_putstr(1, ": cannot open directory '");
-    ft_putstr(1, name);
-    ft_putstr(1, "': ");
-    ft_putstr(1, strerror(errno));
-    ft_putchar(1, '\n');
-
+    print_error(name, "cannot open directory");
     return;
   }
 
@@ -1250,26 +1141,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
       ft_putchar(1, '\n');
     depth++;
 
-    char *has_set = ft_has_set(name, name_set);
-    bool print_quote = print_quotes && has_set != NULL;
-
-    if (print_quote) {
-      if (has_set[0] == '\'')
-        ft_putchar(1, '"');
-      else
-        ft_putchar(1, '\'');
-    }
-
-    ft_putstr(1, name);
-
-    if (print_quote) {
-      if (has_set[0] == '\'')
-        ft_putchar(1, '"');
-      else
-        ft_putchar(1, '\'');
-    }
-
-    ft_putstr(1, ":\n");
+    print_current_dir_name(name);
   }
 
   size_t name_len = ft_strlen(name);
@@ -1313,17 +1185,7 @@ void process_dir_content(FileInfo *file_info, int depth) {
     input.size++;
   }
 
-  if (sort_type == sort_update_time)
-    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_update_time);
-  else if (sort_type == sort_access_time)
-    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_access_time);
-  else if (sort_type == sort_name)
-    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_name);
-  else if (sort_type == sort_size)
-    ft_list_sort(&input.list, (CompareFunc)&file_info_cmp_by_size);
-
-  if (sort_reverse)
-    ft_list_reverse(&input.list);
+  sort_inputs(&input);
 
   if (format == long_format) {
     print_block_size(input.column_info.block_size);
@@ -1364,6 +1226,36 @@ void process_dir_content(FileInfo *file_info, int depth) {
   closedir(o_dir);
 }
 
+void separate_process(void) {
+  separate_input();
+
+  if (files.size > 0) {
+    print_out_format(files);
+
+    if (dirs.size > 0 || all.error)
+      ft_putchar(1, '\n');
+  }
+
+  if (dirs.size > 0) {
+    List *list = dirs.list;
+
+    while (list != NULL) {
+      FileInfo *info = list->data;
+
+      if (dirs.size > 1 || files.size > 0)
+        print_current_dir_name(info->name);
+
+      process_dir_content(info, 0);
+
+      if (dirs.size > 1 && list->next != NULL)
+        ft_putchar(1, '\n');
+
+      list = list->next;
+    }
+  } else if (files.size == 0)
+    process_dir_content(NULL, 0);
+}
+
 void process_inputs(void) {
   if (all.size == 0 && all.error)
     exit_status = 2;
@@ -1371,56 +1263,8 @@ void process_inputs(void) {
     print_out_format(all);
   else if (all.size == 0)
     process_dir_content(NULL, 0);
-  else {
-    separate_input();
-
-    if (files.size > 0) {
-      print_out_format(files);
-
-      if (dirs.size > 0 || all.error)
-        ft_putchar(1, '\n');
-    }
-
-    if (dirs.size > 0) {
-      List *list = dirs.list;
-
-      while (list != NULL) {
-        FileInfo *info = list->data;
-
-        if (dirs.size > 1 || files.size > 0) {
-          char *has_set = ft_has_set(info->name, name_set);
-          bool print_quote = print_quotes && has_set != NULL;
-
-          if (print_quote) {
-            if (has_set[0] == '\'')
-              ft_putchar(1, '"');
-            else
-              ft_putchar(1, '\'');
-          }
-
-          ft_putstr(1, info->name);
-
-          if (print_quote) {
-            if (has_set[0] == '\'')
-              ft_putchar(1, '"');
-            else
-              ft_putchar(1, '\'');
-          }
-
-          ft_putstr(1, ":\n");
-        }
-
-        process_dir_content(info, 0);
-
-        if (dirs.size > 1 && list->next != NULL)
-          ft_putchar(1, '\n');
-
-        list = list->next;
-      }
-    } else if (files.size == 0) {
-      process_dir_content(NULL, 0);
-    }
-  }
+  else
+    separate_process();
 }
 
 int main(int argc, char *argv[]) {
@@ -1430,7 +1274,7 @@ int main(int argc, char *argv[]) {
   program_name = "/bin/ls";
 
   if (parse_args(argc, argv) == 0) {
-    sort_inputs();
+    sort_inputs(&all);
     process_inputs();
   }
 
