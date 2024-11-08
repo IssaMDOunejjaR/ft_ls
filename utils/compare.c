@@ -42,3 +42,17 @@ int file_info_cmp_by_access_time(FileInfo *a, FileInfo *b) {
 
   return file_info_cmp_by_name(a, b);
 }
+
+void sort_inputs(Input *input) {
+  if (sort_type == sort_update_time)
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_update_time);
+  else if (sort_type == sort_access_time)
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_access_time);
+  else if (sort_type == sort_name)
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_name);
+  else if (sort_type == sort_size)
+    ft_list_sort(&input->list, (CompareFunc)&file_info_cmp_by_size);
+
+  if (sort_reverse)
+    ft_list_reverse(&input->list);
+}

@@ -109,10 +109,80 @@ typedef struct GroupCache {
   struct GroupCache *next;
 } GroupCache;
 
+extern int exit_status;
+extern char *program_name;
+extern char *filetype_color[];
+extern char *name_set;
+extern char filetype_letter[];
+
+extern bool sort_reverse;
+extern bool print_owner;
+extern bool print_group;
+extern bool print_with_color;
+extern bool recursive;
+extern bool immediate_dirs;
+extern bool ignore_hidden_files;
+extern bool ignore_dots;
+extern bool print_quotes;
+extern bool print_access_time;
+extern bool _u;
+
+extern enum SortType sort_type;
+extern enum Format format;
+
+extern OwnerCache *owner_cache;
+extern GroupCache *group_cache;
+
+extern Input all, files, dirs;
+
+// Init Functions
+void init_column_info(ColumnInfo *column_info);
+void init_inputs(void);
+FileInfo *create_file_info(char *name, struct stat *stat);
+
+// Options
+void print_help();
+int get_opt(char short_opt, char *long_opt);
+int parse_args(int argc, char **argv);
+
+// Process
+void process_inputs(void);
+
+// Printing
+void print_short_option_not_found(char option);
+void print_long_option_not_found(char *option);
+void input_not_found(char *input);
+void print_block_size(unsigned long size);
+void print_error(char *input, char *message);
+void print_dir_name(FileInfo *file_info, int size);
+void print_current_dir_name(char *name);
+void print_out_format(Input input);
+
+// Short Format
+void calc_many_per_line_format(Input *input, FileInfo **list);
+void out_column_format(Input *input, FileInfo **list);
+
+// Long Format
+void out_long_format(Input *input);
+void update_column_info(FileInfo *info, ColumnInfo *column_info);
+void calc_long_format(Input *input);
+
 // Compare Functions
 int file_info_cmp_by_name(FileInfo *a, FileInfo *b);
 int file_info_cmp_by_size(FileInfo *a, FileInfo *b);
 int file_info_cmp_by_update_time(FileInfo *a, FileInfo *b);
 int file_info_cmp_by_access_time(FileInfo *a, FileInfo *b);
+void sort_inputs(Input *input);
+
+// Clear Funtions
+void clear_file_info(FileInfo *file_info);
+void clear_inputs(void);
+void clear_column_info(ColumnInfo *column_info);
+
+// Util Functions
+void output_buffering(char *arr, size_t *pos, size_t capacity, char *str);
+char *get_owner_name(uid_t uid);
+char *get_group_name(gid_t gid);
+FileInfo **input_list_to_table(Input input);
 
 #endif
