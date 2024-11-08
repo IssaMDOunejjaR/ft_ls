@@ -1,0 +1,3 @@
+[submodule "libcft"]
+	path = libcft
+	url = https://github.com/IssaMDOunejjaR/libcft
