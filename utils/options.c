@@ -41,10 +41,6 @@ static char *VALID_OPTIONS[][4] = {
      "Use time of last access, instead of last modification of the file for "
      "sorting (-t) or long printing (-l).",
      NULL},
-    {"-U", NULL,
-     "Use time of file creation, instead of last modification for sorting (-t) "
-     "or long output (-l).",
-     NULL},
 #endif /* ifdef __APPLE__ */
 
 #ifdef __linux
@@ -185,9 +181,6 @@ static char set_option(char c, char *opt) {
     if (sort_type != not_sort && sort_type != sort_size)
       sort_type = sort_access_time;
     _u = true;
-  } else if (c == 'U') {
-    sort_type = not_sort;
-    sort_reverse = false;
   } else if (c == 'G') {
     print_with_color = true;
   } else {
