@@ -138,7 +138,8 @@ void print_help() {
   }
 }
 
-static char set_option_macos(char c, char *opt) {
+#ifdef __APPLE__
+static char set_option(char c, char *opt) {
   if (opt != NULL) {
     if (ft_strcmp(opt, "--color") == 0) {
       print_with_color = true;
@@ -195,7 +196,9 @@ static char set_option_macos(char c, char *opt) {
 
   return c;
 }
+#endif /* ifdef __APPLE__ */
 
+#ifdef __linux__
 // TODO: improve
 static char set_option(char c, char *opt) {
   if (opt != NULL) {
@@ -262,6 +265,7 @@ static char set_option(char c, char *opt) {
 
   return c;
 }
+#endif /* ifdef __linux__ */
 
 int get_opt(char short_opt, char *long_opt) {
   for (int i = 0; VALID_OPTIONS[i][0] != NULL || VALID_OPTIONS[i][1] != NULL;
@@ -273,19 +277,10 @@ int get_opt(char short_opt, char *long_opt) {
         continue;
 
       if (ft_strcmp(long_opt, tmp) == 0) {
-#ifdef __APPLE__
-        if (VALID_OPTIONS[i][0] == NULL)
-          return set_option_macos(0, tmp);
-
-        return set_option_macos(VALID_OPTIONS[i][0][1], NULL);
-#endif /* ifdef __APPLE__ */
-
-#ifdef __linux__
         if (VALID_OPTIONS[i][0] == NULL)
           return set_option(0, tmp);
 
         return set_option(VALID_OPTIONS[i][0][1], NULL);
-#endif /* ifdef __linux__ */
       }
     } else {
       char *tmp = VALID_OPTIONS[i][0];
@@ -293,15 +288,8 @@ int get_opt(char short_opt, char *long_opt) {
       if (tmp == NULL)
         continue;
 
-      if (short_opt == tmp[1]) {
-#ifdef __APPLE__
-        return set_option_macos(tmp[1], NULL);
-#endif /* ifdef __APPLE__ */
-
-#ifdef __linux
+      if (short_opt == tmp[1])
         return set_option(tmp[1], NULL);
-#endif /* ifdef __linux */
-      }
     }
   }
 
