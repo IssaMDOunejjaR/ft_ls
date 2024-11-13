@@ -33,8 +33,7 @@ enum Format format = many_per_line;
 int main(int argc, char *argv[]) {
   init_inputs();
 
-  /* program_name = argv[0]; */
-  program_name = "/bin/ls";
+  program_name = argv[0];
 
   if (parse_args(argc, argv) == 0) {
     sort_inputs(&all);
