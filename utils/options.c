@@ -137,6 +137,64 @@ void print_help() {
   }
 }
 
+static char set_option_macos(char c, char *opt) {
+  if (opt != NULL) {
+    if (ft_strcmp(opt, "--color") == 0) {
+      print_with_color = true;
+    } else
+      return 0;
+
+    return 1;
+  } else if (c == 'a') {
+    ignore_hidden_files = false;
+    ignore_dots = false;
+  } else if (c == 'A') {
+    ignore_hidden_files = false;
+    ignore_dots = true;
+  } else if (c == 'd') {
+    immediate_dirs = true;
+  } else if (c == 'f') {
+    sort_type = sort_none;
+    print_with_color = false;
+    ignore_hidden_files = false;
+    ignore_dots = false;
+  } else if (c == 'g') {
+    print_owner = false;
+    format = long_format;
+  } else if (c == 'l') {
+    format = long_format;
+  } else if (c == 'o') {
+    print_group = false;
+    format = long_format;
+  } else if (c == 'r') {
+    if (sort_type != not_sort)
+      sort_reverse = true;
+  } else if (c == 'R') {
+    recursive = true;
+  } else if (c == 'S') {
+    sort_type = sort_size;
+  } else if (c == 't') {
+    if (_u)
+      sort_type = sort_access_time;
+    else
+      sort_type = sort_update_time;
+  } else if (c == 'u') {
+    print_access_time = true;
+    if (sort_type != not_sort && sort_type != sort_size)
+      sort_type = sort_access_time;
+    _u = true;
+  } else if (c == 'U') {
+    sort_type = not_sort;
+    sort_reverse = false;
+  } else if (c == 'G') {
+    print_with_color = true;
+  } else {
+    return 0;
+  }
+
+  return c;
+}
+
 // TODO: improve
 static char set_option(char c, char *opt) {
   if (opt != NULL) {
@@ -225,8 +283,15 @@ int get_opt(char short_opt, char *long_opt) {
       if (tmp == NULL)
         continue;
 
-      if (short_opt == tmp[1])
+      if (short_opt == tmp[1]) {
+#ifdef __APPLE__
+        return set_option_macos(tmp[1], NULL);
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux
         return set_option(tmp[1], NULL);
+#endif /* ifdef __linux */
+      }
     }
   }
 
