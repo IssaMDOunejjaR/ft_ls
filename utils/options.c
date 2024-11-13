@@ -1,31 +1,75 @@
 #include "../ft_ls.h"
 
 static char *VALID_OPTIONS[][4] = {
-    {"-a", "--all", "do not ignore entries starting with .", NULL},
+#ifdef __APPLE__
+    {"-@", NULL,
+     "Display extended attribute keys and sizes in long (-l) output.", NULL},
+    {"-A", NULL,
+     "List all entries except for . and ...  Always set for the super-user.",
+     NULL},
+    {"-a", NULL, "Include directory entries whose names begin with a dot (.).",
+     NULL},
+    {"-d", NULL,
+     "Directories are listed as plain files (not searched recursively).", NULL},
+    {"-f", NULL, "Output is not sorted.  This option turns on the -a option.",
+     NULL},
+    {"-G", NULL, "Enable colorized output.", NULL},
+    {"-g", NULL,
+     "This option is only available for compatibility with POSIX; it is used "
+     "to display the group name in the long (-l) format output (the owner name "
+     "is suppressed).",
+     NULL},
+    {"-l", NULL,
+     "(The lowercase letter ``ell''.)  List in long format.  (See below.)  If "
+     "the output is to a terminal, a total sum for all the file sizes is "
+     "output on a line before the long listing.",
+     NULL},
+    {"-o", NULL, "List in long format, but omit the group id.", NULL},
+    {"-R", NULL, "Recursively list subdirectories encountered.", NULL},
+    {"-r", NULL,
+     "Reverse the order of the sort to get reverse lexicographical order or "
+     "the oldest entries first (or largest files last, if combined with sort "
+     "by size",
+     NULL},
+    {"-S", NULL, "Sort files by size", NULL},
+    {"-t", NULL,
+     "Sort by time modified (most recently modified first) before sorting the "
+     "operands by lexicographical order.",
+     NULL},
+    {"-u", NULL,
+     "Use time of last access, instead of last modification of the file for "
+     "sorting (-t) or long printing (-l).",
+     NULL},
+    {"-U", NULL,
+     "Use time of file creation, instead of last modification for sorting (-t) "
+     "or long output (-l).",
+     NULL},
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux
     {"-A", "--almost_all", "do not list implied . and ..", NULL},
+    {"-a", "--all", "do not ignore entries starting with .", NULL},
     {NULL, "--author", "with -l, print the author of each file", NULL},
     {NULL, "--color", "color the output", NULL},
     {"-d", "--directory", "list directories themselves, not their contents",
      NULL},
     {"-f", NULL, "do not sort, enable -aU, disable -ls --color", NULL},
-    {"-g", NULL, "like -l, but do not list owner", NULL},
     {"-G", "--no-group", "in a long listing, don't print group names", NULL},
-    /* {"-h", "--human-readable", */
-    /*  "with -l and -s, print sizes like 1K 234M 2G etc.", NULL}, */
+    {"-g", NULL, "like -l, but do not list owner", NULL},
     {"-l", NULL, "use a long listing format", NULL},
     {"-N", "--literal", "print entry names without quoting", NULL},
     {"-o", NULL, "like -l, but do not list group information", NULL},
-    {"-r", "--reverse", "reverse order while sorting", NULL},
     {"-R", "--recursive", "list subdirectories recursively", NULL},
+    {"-r", "--reverse", "reverse order while sorting", NULL},
     {"-S", NULL, "sort by file size, largest first", NULL},
     {"-t", NULL, "sort by time, newest first; see --time", NULL},
     {"-u", NULL,
-     "with  -lt: sort by, and show, access time; with -l: show access time and "
+     "with  -lt: sort by, and show, access time; with -l: show access time "
+     "and "
      "sort by name; otherwise: sort by acces time, newest first",
      NULL},
     {"-U", NULL, "do not sort; list entries in directory order", NULL},
-    /* {"-x", NULL, "list entries by lines instead of by columns", NULL}, */
-    /* {"-1", NULL, "list one file per line", NULL}, */
+#endif /* ifdef __linux */
 
     {NULL, NULL},
 };

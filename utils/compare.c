@@ -16,10 +16,19 @@ int file_info_cmp_by_size(FileInfo *a, FileInfo *b) {
 }
 
 int file_info_cmp_by_update_time(FileInfo *a, FileInfo *b) {
+#ifdef __APPLE__
+  int64_t s1_time_ns = (a->stat->st_mtimespec.tv_sec * 1000000000LL) +
+                       a->stat->st_mtimespec.tv_nsec;
+  int64_t s2_time_ns = (b->stat->st_mtimespec.tv_sec * 1000000000LL) +
+                       b->stat->st_mtimespec.tv_nsec;
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux
   int64_t s1_time_ns =
       (a->stat->st_mtim.tv_sec * 1000000000LL) + a->stat->st_mtim.tv_nsec;
   int64_t s2_time_ns =
       (b->stat->st_mtim.tv_sec * 1000000000LL) + b->stat->st_mtim.tv_nsec;
+#endif /* ifdef __linux */
 
   if (s1_time_ns < s2_time_ns)
     return 1;

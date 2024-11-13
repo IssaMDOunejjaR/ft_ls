@@ -7,6 +7,17 @@ static char *get_permission(bool condition, char *value) {
 static char *get_time(FileInfo *file_info) {
   time_t now, file_time;
 
+#ifdef __APPLE__
+  if (print_access_time) {
+    file_time = file_info->stat->st_atimespec.tv_sec +
+                (file_info->stat->st_atimespec.tv_nsec / 1000000000LL);
+  } else {
+    file_time = file_info->stat->st_mtimespec.tv_sec +
+                (file_info->stat->st_mtimespec.tv_nsec / 1000000000LL);
+  }
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux
   if (print_access_time) {
     file_time = file_info->stat->st_atim.tv_sec +
                 (file_info->stat->st_atim.tv_nsec / 1000000000LL);
@@ -14,6 +25,7 @@ static char *get_time(FileInfo *file_info) {
     file_time = file_info->stat->st_mtim.tv_sec +
                 (file_info->stat->st_mtim.tv_nsec / 1000000000LL);
   }
+#endif /* ifdef __linux */
 
   char *time_str = ctime(&file_time);
   char *ret = NULL;
