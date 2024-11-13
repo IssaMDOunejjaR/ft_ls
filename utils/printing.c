@@ -1,23 +1,35 @@
 #include "../ft_ls.h"
 
 void print_short_option_not_found(char option) {
-  char *prefix = "ft_ls: invalid option -- '";
-  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+  char *prefix = ": invalid option -- '";
+  char *suffix = "'\nTry '";
+  char *end = " --help' for more information.\n";
 
+  size_t program_name_len = ft_strlen(program_name);
   size_t prefix_len = ft_strlen(prefix);
   size_t option_len = 1;
   size_t suffix_len = ft_strlen(suffix);
+  size_t end_len = ft_strlen(end);
 
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+  char *msg =
+      malloc(sizeof(char) * (program_name_len + prefix_len + option_len +
+                             suffix_len + program_name_len + end_len + 1));
 
   if (msg == NULL)
     return;
 
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, &option);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
+  ft_strcpy(msg, program_name);
+  ft_strcpy(msg + program_name_len, prefix);
+  ft_strcpy(msg + program_name_len + prefix_len, &option);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len, suffix);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len + suffix_len,
+            program_name);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len + suffix_len +
+                program_name_len,
+            end);
 
-  msg[prefix_len + option_len + suffix_len] = '\0';
+  msg[program_name_len + prefix_len + option_len + suffix_len +
+      program_name_len + end_len] = '\0';
 
   ft_putstr(2, msg);
 
@@ -25,23 +37,35 @@ void print_short_option_not_found(char option) {
 }
 
 void print_long_option_not_found(char *option) {
-  char *prefix = "ft_ls: unrecognized option '";
-  char *suffix = "'\nTry 'ft_ls --help' for more information.\n";
+  char *prefix = ": unrecognized option '";
+  char *suffix = "'\nTry '";
+  char *end = " --help' for more information.\n";
 
+  size_t program_name_len = ft_strlen(program_name);
   size_t prefix_len = ft_strlen(prefix);
   size_t option_len = ft_strlen(option);
   size_t suffix_len = ft_strlen(suffix);
+  size_t end_len = ft_strlen(end);
 
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+  char *msg =
+      malloc(sizeof(char) * (program_name_len + prefix_len + option_len +
+                             suffix_len + program_name_len + end_len + 1));
 
   if (msg == NULL)
     return;
 
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, option);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
+  ft_strcpy(msg, program_name);
+  ft_strcpy(msg + program_name_len, prefix);
+  ft_strcpy(msg + program_name_len + prefix_len, option);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len, suffix);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len + suffix_len,
+            program_name);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len + suffix_len +
+                program_name_len,
+            end);
 
-  msg[prefix_len + option_len + suffix_len] = '\0';
+  msg[program_name_len + prefix_len + option_len + suffix_len +
+      program_name_len + end_len] = '\0';
 
   ft_putstr(2, msg);
 
@@ -49,23 +73,26 @@ void print_long_option_not_found(char *option) {
 }
 
 void input_not_found(char *input) {
-  char *prefix = "ft_ls: cannot access '";
+  char *prefix = ": cannot access '";
   char *suffix = "': No such file or directory\n";
 
+  size_t program_name_len = ft_strlen(program_name);
   size_t prefix_len = ft_strlen(prefix);
   size_t option_len = ft_strlen(input);
   size_t suffix_len = ft_strlen(suffix);
 
-  char *msg = malloc(sizeof(char) * (prefix_len + option_len + suffix_len + 1));
+  char *msg = malloc(sizeof(char) * (program_name_len + prefix_len +
+                                     option_len + suffix_len + 1));
 
   if (msg == NULL)
     return;
 
-  ft_strcpy(msg, prefix);
-  ft_strcpy(msg + prefix_len, input);
-  ft_strcpy(msg + prefix_len + option_len, suffix);
+  ft_strcpy(msg, program_name);
+  ft_strcpy(msg + program_name_len, prefix);
+  ft_strcpy(msg + program_name_len + prefix_len, input);
+  ft_strcpy(msg + program_name_len + prefix_len + option_len, suffix);
 
-  msg[prefix_len + option_len + suffix_len] = '\0';
+  msg[program_name_len + prefix_len + option_len + suffix_len] = '\0';
 
   ft_putstr(2, msg);
 
