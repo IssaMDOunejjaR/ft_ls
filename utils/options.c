@@ -9,6 +9,7 @@ static char *VALID_OPTIONS[][4] = {
      NULL},
     {"-a", NULL, "Include directory entries whose names begin with a dot (.).",
      NULL},
+    {NULL, "--color", "color the output", NULL},
     {"-d", NULL,
      "Directories are listed as plain files (not searched recursively).", NULL},
     {"-f", NULL, "Output is not sorted.  This option turns on the -a option.",
@@ -272,10 +273,19 @@ int get_opt(char short_opt, char *long_opt) {
         continue;
 
       if (ft_strcmp(long_opt, tmp) == 0) {
+#ifdef __APPLE__
+        if (VALID_OPTIONS[i][0] == NULL)
+          return set_option_macos(0, tmp);
+
+        return set_option_macos(VALID_OPTIONS[i][0][1], NULL);
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux__
         if (VALID_OPTIONS[i][0] == NULL)
           return set_option(0, tmp);
 
         return set_option(VALID_OPTIONS[i][0][1], NULL);
+#endif /* ifdef __linux__ */
       }
     } else {
       char *tmp = VALID_OPTIONS[i][0];
