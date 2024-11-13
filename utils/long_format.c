@@ -244,8 +244,15 @@ void out_long_format(Input *input) {
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   column_info->block_size += info->stat->st_blocks;
 
+#ifdef __APPLE__
+  ssize_t ret = getxattr(info->fullname ? info->fullname : info->name,
+                         "system.posix_acl_access", NULL, 0, 0, 0);
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux
   ssize_t ret = getxattr(info->fullname ? info->fullname : info->name,
                          "system.posix_acl_access", NULL, 0);
+#endif /* ifdef __linux */
 
   if (ret >= 0) {
     column_info->print_acl = true;
