@@ -25,15 +25,7 @@ void init_column_info(ColumnInfo *column_info) {
   column_info->term_width = get_terminal_width();
   column_info->num_columns = 0;
   column_info->num_rows = 0;
-
-#ifdef __linux
   column_info->gap = 2;
-#endif /* ifdef __linux */
-
-#ifdef __APPLE__
-  column_info->gap = 6;
-#endif /* ifdef __APPLE__ */
-
   column_info->col_widths = NULL;
 }
 
