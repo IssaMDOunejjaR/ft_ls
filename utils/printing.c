@@ -101,7 +101,15 @@ void input_not_found(char *input) {
 
 void print_block_size(unsigned long size) {
   ft_putstr(1, "total ");
+
+#ifdef __APPLE__
+  ft_putnbr(1, size);
+#endif /* ifdef __APPLE__ */
+
+#ifdef __linux__
   ft_putnbr(1, size / 2);
+#endif /* ifdef __linux__ */
+
   ft_putstr(1, "\n");
 }
 
