@@ -249,7 +249,7 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   char *name = info->fullname ? info->fullname : info->name;
 
 #ifdef __APPLE__
-  ssize_t ret = getxattr(name, "system.posix_acl_access", NULL, 0, 0, 0);
+  ssize_t acl_ret = getxattr(name, "system.posix_acl_access", NULL, 0, 0, 0);
   ssize_t attr_ret = listxattr(name, NULL, 0, 0);
 #endif /* ifdef __APPLE__ */
 
