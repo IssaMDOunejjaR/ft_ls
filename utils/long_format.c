@@ -95,7 +95,9 @@ void out_long_format(Input *input) {
                        get_permission(file_info->stat->st_mode & S_IXOTH, "x"));
 
     if (input->column_info.print_acl) {
-      if (file_info->print_acl)
+      if (file_info->print_attr)
+        output_buffering(out, &pos, capacity, "@");
+      else if (file_info->print_acl)
         output_buffering(out, &pos, capacity, "+");
       else
         output_buffering(out, &pos, capacity, " ");
@@ -244,21 +246,29 @@ void out_long_format(Input *input) {
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   column_info->block_size += info->stat->st_blocks;
 
+  char *name = info->fullname ? info->fullname : info->name;
+
 #ifdef __APPLE__
-  ssize_t ret = getxattr(info->fullname ? info->fullname : info->name,
-                         "system.posix_acl_access", NULL, 0, 0, 0);
+  ssize_t ret = getxattr(name, "system.posix_acl_access", NULL, 0, 0, 0);
+  ssize_t attr_ret = listxattr(name, NULL, 0, 0);
 #endif /* ifdef __APPLE__ */
 
 #ifdef __linux
-  ssize_t ret = getxattr(info->fullname ? info->fullname : info->name,
-                         "system.posix_acl_access", NULL, 0);
+  ssize_t acl_ret = getxattr(name, "system.posix_acl_access", NULL, 0);
+  ssize_t attr_ret = listxattr(name, NULL, 0);
 #endif /* ifdef __linux */
 
-  if (ret >= 0) {
+  if (acl_ret >= 0) {
     column_info->print_acl = true;
     info->print_acl = true;
   } else
     info->print_acl = false;
+
+  if (attr_ret > 0) {
+    column_info->print_acl = true;
+    info->print_attr = true;
+  } else
+    info->print_attr = false;
 
   if (print_owner) {
     char *owner = get_owner_name(info->stat->st_uid);
