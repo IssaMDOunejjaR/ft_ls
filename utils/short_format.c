@@ -16,7 +16,7 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
 
       tmp = malloc(size);
 
-      memcpy(tmp, col_widths, size);
+      ft_memcpy(tmp, col_widths, size);
 
       free(col_widths);
     }
