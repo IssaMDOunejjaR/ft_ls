@@ -156,6 +156,7 @@ static char set_option(char c, char *opt) {
     print_with_color = false;
     ignore_hidden_files = false;
     ignore_dots = false;
+    sort_reverse = false;
   } else if (c == 'g') {
     print_owner = false;
     format = long_format;
@@ -172,14 +173,9 @@ static char set_option(char c, char *opt) {
   } else if (c == 'S') {
     sort_type = sort_size;
   } else if (c == 't') {
-    if (_u)
-      sort_type = sort_access_time;
-    else
-      sort_type = sort_update_time;
+    sort_type = sort_update_time;
   } else if (c == 'u') {
     print_access_time = true;
-    if (sort_type != not_sort && sort_type != sort_size)
-      sort_type = sort_access_time;
     _u = true;
   } else if (c == 'G') {
     print_with_color = true;
@@ -345,25 +341,8 @@ int parse_args(int argc, char **argv) {
   }
 
   if (_u) {
-    if (sort_type != not_sort && sort_type != sort_size) {
-      if (format == long_format) {
-        if (sort_type == sort_update_time)
-          sort_type = sort_access_time;
-        else
-          sort_type = sort_name;
-      }
-      /* else sort_type = sort_access_time; */
-    }
-
-    /* if (format == long_format && sort_type == sort_update_time) { */
-    /*   print_access_time = true; */
-    /*   sort_type = sort_access_time; */
-    /* } else if (format == long_format) { */
-    /*   print_access_time = true; */
-    /*   sort_type = sort_name; */
-    /* } else { */
-    /*   sort_type = sort_access_time; */
-    /* } */
+    if (sort_type == sort_update_time)
+      sort_type = sort_access_time;
   }
 
   return 0;
