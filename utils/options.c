@@ -2,8 +2,6 @@
 
 static char *VALID_OPTIONS[][4] = {
 #ifdef __APPLE__
-    {"-@", NULL,
-     "Display extended attribute keys and sizes in long (-l) output.", NULL},
     {"-A", NULL,
      "List all entries except for . and ...  Always set for the super-user.",
      NULL},
