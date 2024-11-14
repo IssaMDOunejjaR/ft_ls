@@ -80,6 +80,7 @@ typedef struct {
 
   bool print_quote;
   bool print_acl;
+  bool print_attr;
   bool has_single_quote;
 
   char *owner_name;
