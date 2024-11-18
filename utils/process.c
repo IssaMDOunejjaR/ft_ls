@@ -145,6 +145,8 @@ static void process_dir_content(FileInfo *file_info, int depth) {
 
 static void separate_process(void) {
   separate_input();
+  sort_inputs(&files);
+  sort_inputs(&dirs);
 
   if (files.size > 0) {
     print_out_format(files);
