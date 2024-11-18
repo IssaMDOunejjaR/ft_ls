@@ -1,4 +1,6 @@
 #include "../ft_ls.h"
+#include <stdio.h>
+#include <sys/stat.h>
 
 static void separate_input(void) {
   List *list = all.list;
@@ -7,8 +9,23 @@ static void separate_input(void) {
     List *tmp = list;
     FileInfo *file_info = list->data;
 
-    if (file_info->filetype == normal || file_info->filetype == symbolic_link ||
-        file_info->filetype == executable) {
+    if (file_info->filetype == symbolic_link) {
+      char *name = file_info->fullname ? file_info->fullname : file_info->name;
+      struct stat stats;
+
+      if (stat(name, &stats) == -1) {
+        perror("stat");
+      } else {
+        if (S_ISDIR(stats.st_mode)) {
+          ft_list_push_back(&dirs.list, file_info);
+          dirs.size++;
+        } else {
+          ft_list_push_back(&files.list, file_info);
+          files.size++;
+        }
+      }
+    } else if (file_info->filetype == normal ||
+               file_info->filetype == executable) {
       ft_list_push_back(&files.list, file_info);
       files.size++;
     } else if (file_info->filetype == directory) {
