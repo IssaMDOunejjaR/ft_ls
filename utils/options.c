@@ -177,6 +177,7 @@ static char set_option(char c, char *opt) {
     comma_separated = true;
   } else if (c == 'n') {
     numeric_ids = true;
+    format = long_format;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
@@ -250,6 +251,7 @@ static char set_option(char c, char *opt) {
     print_quotes = false;
   } else if (c == 'n') {
     numeric_ids = true;
+    format = long_format;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
