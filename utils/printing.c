@@ -150,6 +150,9 @@ static void print_file_name(FileInfo *file_info, enum Filetype file_type) {
 
   output_buffering(out, &pos, capacity, WHITE);
 
+  if (write_slash && file_info->filetype == directory)
+    output_buffering(out, &pos, capacity, "/");
+
   ft_putstr(1, out);
 }
 
@@ -195,7 +198,8 @@ void print_out_format(Input input) {
   } else if (format == many_per_line) {
     FileInfo **list = input_list_to_table(input);
 
-    calc_many_per_line_format(&input, list);
+    if (!comma_separated)
+      calc_many_per_line_format(&input, list);
     out_column_format(&input, list);
 
     clear_column_info(&input.column_info);

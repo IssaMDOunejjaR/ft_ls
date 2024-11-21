@@ -14,6 +14,9 @@ bool ignore_hidden_files = true;
 bool ignore_dots;
 bool print_quotes = true;
 bool print_access_time = false;
+bool comma_separated;
+bool write_slash;
+bool one_column;
 bool _u;
 
 char filetype_letter[] = "d-l-";

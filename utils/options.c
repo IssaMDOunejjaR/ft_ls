@@ -2,6 +2,7 @@
 
 static char *VALID_OPTIONS[][4] = {
 #ifdef __APPLE__
+    {"-1", NULL, "list one file per line", NULL},
     {"-A", NULL,
      "List all entries except for . and ...  Always set for the super-user.",
      NULL},
@@ -23,7 +24,9 @@ static char *VALID_OPTIONS[][4] = {
      "the output is to a terminal, a total sum for all the file sizes is "
      "output on a line before the long listing.",
      NULL},
+    {"-m", NULL, "fill width with a comma separated list of entries", NULL},
     {"-o", NULL, "List in long format, but omit the group id.", NULL},
+    {"-p", NULL, "append / indicator to directories", NULL},
     {"-R", NULL, "Recursively list subdirectories encountered.", NULL},
     {"-r", NULL,
      "Reverse the order of the sort to get reverse lexicographical order or "
@@ -42,6 +45,7 @@ static char *VALID_OPTIONS[][4] = {
 #endif /* ifdef __APPLE__ */
 
 #ifdef __linux
+    {"-1", NULL, "list one file per line", NULL},
     {"-A", "--almost_all", "do not list implied . and ..", NULL},
     {"-a", "--all", "do not ignore entries starting with .", NULL},
     {NULL, "--author", "with -l, print the author of each file", NULL},
@@ -52,8 +56,10 @@ static char *VALID_OPTIONS[][4] = {
     {"-G", "--no-group", "in a long listing, don't print group names", NULL},
     {"-g", NULL, "like -l, but do not list owner", NULL},
     {"-l", NULL, "use a long listing format", NULL},
+    {"-m", NULL, "fill width with a comma separated list of entries", NULL},
     {"-N", "--literal", "print entry names without quoting", NULL},
     {"-o", NULL, "like -l, but do not list group information", NULL},
+    {"-p", NULL, "append / indicator to directories", NULL},
     {"-R", "--recursive", "list subdirectories recursively", NULL},
     {"-r", "--reverse", "reverse order while sorting", NULL},
     {"-S", NULL, "sort by file size, largest first", NULL},
@@ -141,6 +147,9 @@ static char set_option(char c, char *opt) {
       return 0;
 
     return 1;
+  } else if (c == '1') {
+    one_column = true;
+    comma_separated = false;
   } else if (c == 'a') {
     ignore_hidden_files = false;
     ignore_dots = false;
@@ -160,9 +169,14 @@ static char set_option(char c, char *opt) {
     format = long_format;
   } else if (c == 'l') {
     format = long_format;
+  } else if (c == 'm') {
+    one_column = false;
+    comma_separated = true;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
+  } else if (c == 'p') {
+    write_slash = true;
   } else if (c == 'r') {
     if (sort_type != not_sort)
       sort_reverse = true;
@@ -200,6 +214,9 @@ static char set_option(char c, char *opt) {
       return 0;
 
     return 1;
+  } else if (c == '1') {
+    one_column = true;
+    comma_separated = false;
   } else if (c == 'a') {
     ignore_hidden_files = false;
     ignore_dots = false;
@@ -219,11 +236,16 @@ static char set_option(char c, char *opt) {
     format = long_format;
   } else if (c == 'l') {
     format = long_format;
+  } else if (c == 'm') {
+    one_column = false;
+    comma_separated = true;
   } else if (c == 'N') {
     print_quotes = false;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
+  } else if (c == 'p') {
+    write_slash = true;
   } else if (c == 'r') {
     if (sort_type != not_sort)
       sort_reverse = true;

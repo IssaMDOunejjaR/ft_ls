@@ -126,6 +126,9 @@ extern bool ignore_hidden_files;
 extern bool ignore_dots;
 extern bool print_quotes;
 extern bool print_access_time;
+extern bool comma_separated;
+extern bool write_slash;
+extern bool one_column;
 extern bool _u;
 
 extern enum SortType sort_type;

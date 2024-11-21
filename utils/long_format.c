@@ -214,6 +214,9 @@ void out_long_format(Input *input) {
       output_buffering(out, &pos, capacity, WHITE);
     }
 
+    if (write_slash && file_info->filetype == directory)
+      output_buffering(out, &pos, capacity, "/");
+
     while (size > 0) {
       output_buffering(out, &pos, capacity, " ");
 

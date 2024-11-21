@@ -1,4 +1,5 @@
 #include "../ft_ls.h"
+#include <stddef.h>
 
 // TODO: improve
 void calc_many_per_line_format(Input *input, FileInfo **list) {
@@ -92,6 +93,33 @@ void calc_many_per_line_format(Input *input, FileInfo **list) {
 
 void out_column_format(Input *input, FileInfo **list) {
   ColumnInfo column_info = input->column_info;
+
+  if (one_column) {
+    for (size_t i = 0; i < input->size; i++) {
+      FileInfo *file_info = list[i];
+
+      print_dir_name(file_info, 0);
+
+      ft_putchar(1, '\n');
+    }
+
+    return;
+  }
+
+  if (comma_separated) {
+    for (size_t i = 0; i < input->size; i++) {
+      FileInfo *file_info = list[i];
+
+      print_dir_name(file_info, 0);
+
+      if (i + 1 < input->size)
+        ft_putstr(1, ", ");
+    }
+
+    ft_putchar(1, '\n');
+
+    return;
+  }
 
   for (size_t row = 0; row < column_info.num_rows; row++) {
     for (size_t col = 0; col < column_info.num_columns; col++) {
