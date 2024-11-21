@@ -1,4 +1,6 @@
 #include "../ft_ls.h"
+#include <stddef.h>
+#include <stdlib.h>
 
 static char *get_permission(bool condition, char *value) {
   return condition ? value : "-";
@@ -121,28 +123,57 @@ void out_long_format(Input *input) {
     output_buffering(out, &pos, capacity, " ");
 
     if (print_owner) {
-      output_buffering(out, &pos, capacity, file_info->owner_name);
+      if (numeric_ids) {
+        size = column_info.owner_width -
+               ft_unsigned_number_len(file_info->stat->st_uid);
 
-      size = column_info.owner_width - ft_strlen(file_info->owner_name);
+        while (size > 0) {
+          output_buffering(out, &pos, capacity, " ");
 
-      while (size > 0) {
-        output_buffering(out, &pos, capacity, " ");
+          size--;
+        }
 
-        size--;
+        char *uid = ft_itoa(file_info->stat->st_uid);
+        output_buffering(out, &pos, capacity, uid);
+        free(uid);
+      } else {
+        output_buffering(out, &pos, capacity, file_info->owner_name);
+
+        size = column_info.owner_width - ft_strlen(file_info->owner_name);
+
+        while (size > 0) {
+          output_buffering(out, &pos, capacity, " ");
+
+          size--;
+        }
       }
 
       output_buffering(out, &pos, capacity, " ");
     }
 
     if (print_group) {
-      output_buffering(out, &pos, capacity, file_info->group_name);
+      if (numeric_ids) {
+        size = column_info.group_width -
+               ft_unsigned_number_len(file_info->stat->st_gid);
 
-      size = column_info.group_width - ft_strlen(file_info->group_name);
+        while (size > 0) {
+          output_buffering(out, &pos, capacity, " ");
 
-      while (size > 0) {
-        output_buffering(out, &pos, capacity, " ");
+          size--;
+        }
+        char *gid = ft_itoa(file_info->stat->st_gid);
+        output_buffering(out, &pos, capacity, gid);
+        free(gid);
+      } else {
+        output_buffering(out, &pos, capacity, file_info->group_name);
 
-        size--;
+        size = column_info.group_width - ft_strlen(file_info->group_name);
+
+        while (size > 0) {
+          output_buffering(out, &pos, capacity, " ");
+
+          size--;
+        }
       }
 
       output_buffering(out, &pos, capacity, " ");
@@ -274,26 +305,40 @@ void update_column_info(FileInfo *info, ColumnInfo *column_info) {
     info->print_attr = false;
 
   if (print_owner) {
-    char *owner = get_owner_name(info->stat->st_uid);
-
-    if (owner) {
-      info->owner_name = owner;
-      size_t owner_len = ft_strlen(owner);
+    if (numeric_ids) {
+      size_t owner_len = ft_unsigned_number_len(info->stat->st_uid);
 
       if (owner_len > column_info->owner_width)
         column_info->owner_width = owner_len;
+    } else {
+      char *owner = get_owner_name(info->stat->st_uid);
+
+      if (owner) {
+        info->owner_name = owner;
+        size_t owner_len = ft_strlen(owner);
+
+        if (owner_len > column_info->owner_width)
+          column_info->owner_width = owner_len;
+      }
     }
   }
 
   if (print_group) {
-    char *group_name = get_group_name(info->stat->st_gid);
-
-    if (group_name) {
-      info->group_name = group_name;
-      size_t group_len = ft_strlen(group_name);
+    if (numeric_ids) {
+      size_t group_len = ft_unsigned_number_len(info->stat->st_gid);
 
       if (group_len > column_info->group_width)
         column_info->group_width = group_len;
+    } else {
+      char *group_name = get_group_name(info->stat->st_gid);
+
+      if (group_name) {
+        info->group_name = group_name;
+        size_t group_len = ft_strlen(group_name);
+
+        if (group_len > column_info->group_width)
+          column_info->group_width = group_len;
+      }
     }
   }
 

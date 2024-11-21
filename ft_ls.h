@@ -129,6 +129,7 @@ extern bool print_access_time;
 extern bool comma_separated;
 extern bool write_slash;
 extern bool one_column;
+extern bool numeric_ids;
 extern bool _u;
 
 extern enum SortType sort_type;

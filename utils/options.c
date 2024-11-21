@@ -25,6 +25,7 @@ static char *VALID_OPTIONS[][4] = {
      "output on a line before the long listing.",
      NULL},
     {"-m", NULL, "fill width with a comma separated list of entries", NULL},
+    {"-n", NULL, "like -l, but list numeric user and group IDs", NULL},
     {"-o", NULL, "List in long format, but omit the group id.", NULL},
     {"-p", NULL, "append / indicator to directories", NULL},
     {"-R", NULL, "Recursively list subdirectories encountered.", NULL},
@@ -58,6 +59,8 @@ static char *VALID_OPTIONS[][4] = {
     {"-l", NULL, "use a long listing format", NULL},
     {"-m", NULL, "fill width with a comma separated list of entries", NULL},
     {"-N", "--literal", "print entry names without quoting", NULL},
+    {"-n", "--numeric-uid-gid", "like -l, but list numeric user and group IDs",
+     NULL},
     {"-o", NULL, "like -l, but do not list group information", NULL},
     {"-p", NULL, "append / indicator to directories", NULL},
     {"-R", "--recursive", "list subdirectories recursively", NULL},
@@ -172,6 +175,8 @@ static char set_option(char c, char *opt) {
   } else if (c == 'm') {
     one_column = false;
     comma_separated = true;
+  } else if (c == 'n') {
+    numeric_ids = true;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
@@ -210,6 +215,8 @@ static char set_option(char c, char *opt) {
     } else if (ft_strcmp(opt, "--almost_all") == 0) {
       ignore_hidden_files = false;
       ignore_dots = true;
+    } else if (ft_strcmp(opt, "--numeric-uid-gid") == 0) {
+      numeric_ids = true;
     } else
       return 0;
 
@@ -241,6 +248,8 @@ static char set_option(char c, char *opt) {
     comma_separated = true;
   } else if (c == 'N') {
     print_quotes = false;
+  } else if (c == 'n') {
+    numeric_ids = true;
   } else if (c == 'o') {
     print_group = false;
     format = long_format;
