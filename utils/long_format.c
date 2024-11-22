@@ -1,6 +1,4 @@
 #include "../ft_ls.h"
-#include <stddef.h>
-#include <stdlib.h>
 
 static char *get_permission(bool condition, char *value) {
   return condition ? value : "-";
@@ -279,8 +277,19 @@ void out_long_format(Input *input) {
 
 void update_column_info(FileInfo *info, ColumnInfo *column_info) {
   column_info->block_size += info->stat->st_blocks;
-
   char *name = info->fullname ? info->fullname : info->name;
+
+  if (info->filetype == symbolic_link) {
+    char target[1024];
+    ssize_t len = readlink(name, target, sizeof(target) - 1);
+
+    if (len == -1) {
+      perror("readlink");
+    } else {
+      target[len] = '\0';
+      name = target;
+    }
+  }
 
 #ifdef __APPLE__
   ssize_t acl_ret = getxattr(name, "com.apple.acl.text", NULL, 0, 0, 0);
