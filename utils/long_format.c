@@ -53,7 +53,6 @@ static char *get_time(FileInfo *file_info) {
   return ret;
 }
 
-// TODO: improve
 void out_long_format(Input *input) {
   List *list = input->list;
   ColumnInfo column_info = input->column_info;

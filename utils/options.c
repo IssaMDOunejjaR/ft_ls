@@ -206,7 +206,6 @@ static char set_option(char c, char *opt) {
 #endif /* ifdef __APPLE__ */
 
 #ifdef __linux__
-// TODO: improve
 static char set_option(char c, char *opt) {
   if (opt != NULL) {
     if (ft_strcmp(opt, "--color") == 0) {
@@ -316,7 +315,6 @@ int get_opt(char short_opt, char *long_opt) {
   return 0;
 }
 
-// TODO: improve
 int parse_args(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (ft_strcmp(argv[i], "--help") == 0) {

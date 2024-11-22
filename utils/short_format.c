@@ -1,7 +1,5 @@
 #include "../ft_ls.h"
-#include <stddef.h>
 
-// TODO: improve
 void calc_many_per_line_format(Input *input, FileInfo **list) {
   size_t num_columns = 1, num_rows = input->size;
   size_t *col_widths = NULL, *tmp = NULL;

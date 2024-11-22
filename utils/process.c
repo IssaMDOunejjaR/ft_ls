@@ -1,6 +1,4 @@
 #include "../ft_ls.h"
-#include <stdio.h>
-#include <sys/stat.h>
 
 static void separate_input(void) {
   List *list = all.list;
@@ -40,7 +38,6 @@ static void separate_input(void) {
   all.list = NULL;
 }
 
-// TODO: improve
 static void process_dir_content(FileInfo *file_info, int depth) {
   char *name = file_info
                    ? file_info->fullname ? file_info->fullname : file_info->name
